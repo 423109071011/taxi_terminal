@@ -1,0 +1,13 @@
+# 编译产物
+*.o
+taxi_terminal
+gps_server
+*.out
+
+# 平台日志
+platform.log
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
