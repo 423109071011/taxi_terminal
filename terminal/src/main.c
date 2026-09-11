@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <pthread.h>
 #include <time.h>
 #include "app.h"
@@ -13,6 +14,7 @@ int main(int argc, char **argv) {
     const char *cfgpath = (argc > 1) ? argv[1] : "deploy/config";
     pthread_t t_key, t_rfid, t_gps, t_beep, t_cycle, t_led, t_net;
 
+    memset(&st, 0, sizeof(st));
     pthread_mutex_init(&st.lock, NULL);
     cfg_load(&st.cfg, cfgpath);
     app_term_id_from_text(&st);

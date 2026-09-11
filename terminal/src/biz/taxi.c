@@ -13,6 +13,8 @@
 /* 供消息处理函数访问（taxi_init 时指向 main 的 st） */
 static app_state *g_st;
 
+static pthread_mutex_t g_send_lock = PTHREAD_MUTEX_INITIALIZER;
+
 /* ---------- 显示条目 getter ---------- */
 static char *g_card(app_state *st) {
     static char b[16];
@@ -34,8 +36,12 @@ static char *g_gps(app_state *st) {
 /* ---------- 上报 ---------- */
 static void send_frame(app_state *st, unsigned short mid, const unsigned char *body, int len) {
     unsigned char out[512];
-    int n = jt808_build(out, sizeof(out), mid, st->term_id, st->term_id, &st->serial, body, len);
-    if (st->net_fd >= 0) hal_net_send(st->net_fd, out, n);
+    int n, fd;
+    pthread_mutex_lock(&g_send_lock);
+    n = jt808_build(out, sizeof(out), mid, st->term_id, st->term_id, &st->serial, body, len);
+    fd = st->net_fd;
+    pthread_mutex_unlock(&g_send_lock);
+    if (fd >= 0) hal_net_send(fd, out, n);
 }
 
 int taxi_report_auth(app_state *st) {
@@ -94,6 +100,7 @@ void *taxi_key_thread(void *arg) {
         int v = hal_key_read(st->key_fd, &code);
         if (v != 1) continue;
         int a = key_map(code, &d);
+        int need_auth = 0;
         pthread_mutex_lock(&st->lock);
         if (a == K_DIGIT) {
             if (auth_len < 6) { auth_buf[auth_len++] = d; auth_buf[auth_len] = 0; }
@@ -103,7 +110,7 @@ void *taxi_key_thread(void *arg) {
             auth_buf[auth_len] = 0;
             memcpy(st->auth_buf, auth_buf, auth_len);
             st->auth_len = auth_len;
-            taxi_report_auth(st);
+            need_auth = 1;
             auth_len = 0;
         } else if (a == K_CLOSE) {
             st->door_open = 0;
@@ -116,8 +123,9 @@ void *taxi_key_thread(void *arg) {
             st->disp_idx = (st->disp_idx + 1) % display_mgr_count();
             display_mgr_show_item(st, st->disp_idx, 1);
         }
-        pthread_mutex_unlock(&st->lock);
         st->last_key = time(NULL);
+        pthread_mutex_unlock(&st->lock);
+        if (need_auth) taxi_report_auth(st);
     }
     return NULL;
 }
