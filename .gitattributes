@@ -1,0 +1,6 @@
+# 源码与脚本强制 LF，确保虚拟机里的 arm-gcc / shell 正常读取
+*.c   text eol=lf
+*.h   text eol=lf
+Makefile text eol=lf
+*.sh  text eol=lf
+*.md  text eol=lf
