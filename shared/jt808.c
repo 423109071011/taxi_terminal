@@ -39,11 +39,16 @@ int jt808_build(unsigned char *out, int out_cap, unsigned short msg_id,
     out[0] = raw[0];
     j = 1;
     for (i = 1; i < raw_len - 1; i++) {
-        if (raw[i] == 0x7E)      { out[j++] = 0x7D; out[j++] = 0x02; }
-        else if (raw[i] == 0x7D) { out[j++] = 0x7D; out[j++] = 0x01; }
-        else                     { out[j++] = raw[i]; }
-        if (j > out_cap) return -1;
+        if (raw[i] == 0x7E || raw[i] == 0x7D) {
+            if (j + 2 > out_cap) return -1;
+            out[j++] = 0x7D;
+            out[j++] = (raw[i] == 0x7E) ? 0x02 : 0x01;
+        } else {
+            if (j + 1 > out_cap) return -1;
+            out[j++] = raw[i];
+        }
     }
+    if (j + 1 > out_cap) return -1;
     out[j++] = raw[raw_len - 1];
     return j;
 }
@@ -60,8 +65,8 @@ static int jt808_process(jt808_decoder_t *d, unsigned short *msg_id,
     int blen;
     if (d->len < 23) return 0;                 /* 22 头 + 1 校验 */
     blen = d->len - 23;
-    if (((d->buf[2] & 0x03) << 8 | d->buf[3]) != blen) return -1;
-    if (xor_checksum(d->buf, d->len - 1) != d->buf[d->len - 1]) return -1;
+    if (((d->buf[2] & 0x03) << 8 | d->buf[3]) != blen) { d->len = 0; d->in_frame = 0; d->esc = 0; return -1; }
+    if (xor_checksum(d->buf, d->len - 1) != d->buf[d->len - 1]) { d->len = 0; d->in_frame = 0; d->esc = 0; return -1; }
     *msg_id = (d->buf[0] << 8) | d->buf[1];
     memcpy(phone,   d->buf + 4,  6);
     memcpy(term_id, d->buf + 10, 6);
@@ -84,6 +89,7 @@ int jt808_decode(jt808_decoder_t *d, const unsigned char *data, int n,
         }
         if (d->esc) {
             d->esc = 0;
+            if (d->len >= (int)sizeof(d->buf)) { d->len = 0; d->in_frame = 0; return -1; }
             d->buf[d->len++] = (c == 0x02) ? 0x7E : (c == 0x01) ? 0x7D : c;
             continue;
         }
