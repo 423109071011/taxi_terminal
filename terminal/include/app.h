@@ -1,0 +1,31 @@
+#ifndef APP_H
+#define APP_H
+#include <pthread.h>
+#include <time.h>
+#include "cfg.h"
+#include "hal.h"
+
+typedef struct {
+    pthread_mutex_t lock;
+    app_config_t cfg;
+    unsigned char term_id[6];       /* 由 terminal_id 文本转 BCD */
+    unsigned short serial;
+    /* 设备句柄 */
+    int net_fd;                     /* 当前网络套接字，net_task 维护 */
+    int key_fd, display_fd, rfid_fd, beep_fd, servo_fd, gps_fd;
+    /* 业务状态 */
+    unsigned char card[4]; int has_card;
+    int door_open;
+    int verified;                   /* 0 未验证 / 1 准许 / -1 拒绝 */
+    int fatigue;
+    gps_fix_t gps;
+    int net_ok;
+    /* 身份码输入 */
+    unsigned char auth_buf[8]; int auth_len;
+    /* 显示 */
+    int disp_idx;                   /* 当前翻页条目 */
+    time_t last_key;                /* 最后按键时间（轮播判断） */
+} app_state;
+
+int  app_term_id_from_text(app_state *st);   /* 文本 -> BCD */
+#endif
