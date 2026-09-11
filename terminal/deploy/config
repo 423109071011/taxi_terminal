@@ -1,0 +1,6 @@
+server_ip=192.168.1.100
+server_port=8888
+terminal_id=091111222200
+password_len=6
+door_open_angle=90
+door_close_angle=0
