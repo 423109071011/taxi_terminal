@@ -135,7 +135,8 @@ void *taxi_rfid_thread(void *arg) {
     unsigned char card[4];
     while (1) {
         int r = hal_rfid_read(st->rfid_fd, card);
-        if (r == 1) {
+        /* 厂商驱动无卡时也返回 4 字节 0x00，全 0 视为“没有卡”，忽略 */
+        if (r == 1 && (card[0] | card[1] | card[2] | card[3]) != 0) {
             pthread_mutex_lock(&st->lock);
             memcpy(st->card, card, 4); st->has_card = 1;
             st->door_open = 1;
