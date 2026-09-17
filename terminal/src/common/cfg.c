@@ -17,6 +17,7 @@ static void set_defaults(app_config_t *c) {
     strcpy(c->server_ip, "192.168.1.100");
     c->server_port = 8888;
     strcpy(c->terminal_id, "091111222200");
+    c->phone_id[0] = '\0';             /* 未配置时用终端ID代替（见 net_task.c） */
     c->password_len = 6;
     c->door_open_angle = 90;
     c->door_close_angle = 0;
@@ -39,6 +40,7 @@ int cfg_load(app_config_t *c, const char *path) {
         if      (!strcmp(k, "server_ip"))        strncpy(c->server_ip, v, 31);
         else if (!strcmp(k, "server_port"))      c->server_port = atoi(v);
         else if (!strcmp(k, "terminal_id"))      strncpy(c->terminal_id, v, 12);
+        else if (!strcmp(k, "phone_id"))         strncpy(c->phone_id, v, 12);
         else if (!strcmp(k, "password_len"))     c->password_len = atoi(v);
         else if (!strcmp(k, "door_open_angle"))  c->door_open_angle = atoi(v);
         else if (!strcmp(k, "door_close_angle")) c->door_close_angle = atoi(v);

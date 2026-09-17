@@ -9,6 +9,7 @@ typedef struct {
     pthread_mutex_t lock;
     app_config_t cfg;
     unsigned char term_id[6];       /* 由 terminal_id 文本转 BCD */
+    unsigned char phone_id[6];      /* 终端手机号 BCD（消息头用） */
     unsigned short serial;
     /* 设备句柄 */
     int net_fd;                     /* 当前网络套接字，net_task 维护 */

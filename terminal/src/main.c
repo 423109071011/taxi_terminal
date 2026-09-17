@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     pthread_create(&t_beep,  NULL, taxi_beep_thread,&st);
     pthread_create(&t_cycle, NULL, taxi_cycle_thread,&st);
 
-    printf("init done. 输入 ? 或 help 查看命令\n");
+    printf("init done. type ? or help for commands\n");
     cmdline_loop(&st);   /* 主线程只读 stdin */
     hal_beep_off(st.beep_fd);   /* 退出前关掉蜂鸣器，避免余音 */
     return 0;

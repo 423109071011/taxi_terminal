@@ -6,6 +6,7 @@
 #include "hal.h"
 #include "jt808.h"
 #include "dispatch.h"
+#include "taxi.h"
 
 static void print_help(void) {
     printf("commands:\n");
@@ -26,22 +27,17 @@ static void print_info(app_state *st) {
 /* 历史路径文件格式：每行 "纬度,经度"（度，十进制） */
 int uppath_upload(app_state *st, const char *file) {
     FILE *f = fopen(file, "r");
-    unsigned char out[512];
+    unsigned char out[512], body[34];
     char line[128];
     if (!f) { perror("uppath open"); return -1; }
     while (fgets(line, sizeof(line), f)) {
         double lat, lon;
         if (sscanf(line, "%lf , %lf", &lat, &lon) != 2) continue;
-        /* 简易 0x0200 消息体：报警0/状态0 + 纬度4 + 经度4 */
-        unsigned char body[16] = {0};
-        long ilat = (long)(lat * 1000000);
-        long ilon = (long)(lon * 1000000);
-        body[0]=body[1]=body[2]=body[3]=0; body[4]=body[5]=body[6]=body[7]=0;
-        body[8] = (ilat>>24)&0xff; body[9]=(ilat>>16)&0xff; body[10]=(ilat>>8)&0xff; body[11]=ilat&0xff;
-        body[12] = (ilon>>24)&0xff; body[13]=(ilon>>16)&0xff; body[14]=(ilon>>8)&0xff; body[15]=ilon&0xff;
-        int n = jt808_build(out, sizeof(out), MSG_LOCATION, st->term_id, st->term_id,
-                            &st->serial, body, 16);
-        if (st->net_fd >= 0) hal_net_send(st->net_fd, out, n);
+        /* 协议完整 0x0200 消息体（28B 基本信息 + 里程附加项） */
+        taxi_build_location_body(st, lat, lon, body);
+        int n = jt808_build(out, sizeof(out), MSG_LOCATION, st->phone_id, st->term_id,
+                            &st->serial, body, 34);
+        if (st->net_fd >= 0 && n > 0) hal_net_send(st->net_fd, out, n);
         usleep(200000);
     }
     fclose(f);

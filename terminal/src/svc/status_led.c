@@ -12,9 +12,9 @@ void *status_led_task(void *arg) {
     if (fd < 0) return NULL;
     int startup = 1;
     while (1) {
-        int fatigue, netok;
+        int fatigue, netok, gps_status;
         pthread_mutex_lock(&st->lock);
-        fatigue = st->fatigue; netok = st->net_ok;
+        fatigue = st->fatigue; netok = st->net_ok; gps_status = st->gps.status;
         pthread_mutex_unlock(&st->lock);
 
         if (startup) {            /* 启动：绿200/灭300，约2s后转运行 */
@@ -28,7 +28,7 @@ void *status_led_task(void *arg) {
             hal_led_set(fd,'g',1); ms(100); hal_led_set(fd,'g',0); ms(50);
             hal_led_set(fd,'b',1); ms(100); hal_led_set(fd,'b',0); ms(50);
             hal_led_set(fd,'b',1); ms(100); hal_led_set(fd,'b',0); ms(350);
-        } else if (!netok || st->gps.status == 0) {  /* 无网/无GPS */
+        } else if (!netok || gps_status == 0) {  /* 无网/无GPS */
             hal_led_set(fd,'r',1); ms(300); hal_led_set(fd,'r',0); ms(200);
             hal_led_set(fd,'g',1); ms(300); hal_led_set(fd,'g',0); ms(200);
             hal_led_set(fd,'b',1); ms(300); hal_led_set(fd,'b',0); ms(200);
