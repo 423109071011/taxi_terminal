@@ -12,6 +12,7 @@ static void print_help(void) {
     printf("commands:\n");
     printf("  ? / help                 show this help\n");
     printf("  info                     show current sensor values\n");
+    printf("  servo <0-180>            set servo angle (test)\n");
     printf("  uppath <coord-file>      upload history path to server\n");
 }
 
@@ -53,6 +54,17 @@ void cmdline_loop(app_state *st) {
         sscanf(line, "%63s %127s", cmd, arg);
         if (!strcmp(cmd, "?") || !strcmp(cmd, "help")) print_help();
         else if (!strcmp(cmd, "info")) print_info(st);
+        else if (!strcmp(cmd, "servo")) {
+            if (arg[0]) {
+                int a = atoi(arg);
+                if (a < 0 || a > 180) { printf("angle 0-180\n"); }
+                else if (st->servo_fd < 0) { printf("servo not available\n"); }
+                else {
+                    hal_servo_angle(st->servo_fd, a);
+                    printf("servo -> %d deg (ret ioctl ok)\n", a);
+                }
+            } else printf("usage: servo <0-180>\n");
+        }
         else if (!strcmp(cmd, "uppath")) {
             if (arg[0]) uppath_upload(st, arg);
             else printf("usage: uppath <coord-file>\n");
