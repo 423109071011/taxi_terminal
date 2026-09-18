@@ -51,7 +51,20 @@ void cmdline_loop(app_state *st) {
     printf("taxi_terminal> "); fflush(stdout);
     while (fgets(line, sizeof(line), stdin)) {
         char cmd[64] = {0}, arg[128] = {0};
-        sscanf(line, "%63s %127s", cmd, arg);
+        char *p = line;
+        /* 防呆：粘贴时把 "taxi_terminal>" 提示符一起粘进来的，自动跳过 */
+        for (int i = 0; i < 3; i++) {
+            char probe[64] = {0};
+            if (sscanf(p, "%63s", probe) != 1) break;
+            size_t pl = strlen(probe);
+            if (pl > 0 && probe[pl - 1] == '>') {
+                p += pl;
+                while (*p == ' ' || *p == '\t') p++;
+                continue;
+            }
+            break;
+        }
+        sscanf(p, "%63s %127s", cmd, arg);
         if (!strcmp(cmd, "?") || !strcmp(cmd, "help")) print_help();
         else if (!strcmp(cmd, "info")) print_info(st);
         else if (!strcmp(cmd, "servo")) {
