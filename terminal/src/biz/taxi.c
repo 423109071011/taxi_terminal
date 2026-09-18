@@ -175,7 +175,7 @@ int taxi_handle_auth_resp(unsigned short id, const unsigned char *b, int len) {
     int v = st->verified;
     if (v == 1) {
         st->door_open = 1;
-        st->last_key = time(NULL);   /* 开门也视为一次操作，参与10s超时计时 */
+        st->last_key = time(NULL);   /* 认证开门视为一次操作，刷新空闲计时 */
     }
     pthread_mutex_unlock(&st->lock);
     hal_display_string(st->display_fd, v == 1 ? "PASS" : "FAIL");
@@ -209,14 +209,13 @@ void *taxi_key_thread(void *arg) {
         unsigned int code = 0; char d = 0;
         int v = hal_key_read(st->key_fd, &code);
         if (v != 1) continue;
-        printf("[KEY] raw=%u\n", code);   /* 调试：打印实际键码，便于校准键值表 */
         int a = key_map(code, &d);
         int need_auth = 0;
         pthread_mutex_lock(&st->lock);
         if (a == K_DIGIT) {
             if (auth_len < 6) { auth_buf[auth_len++] = d; auth_buf[auth_len] = 0; }
             hal_display_char(d);   /* 新数字滚入最左位，旧数字右移 */
-            printf("[IDCODE] %.*s\n", auth_len, auth_buf);
+            printf("[身份码输入] %.*s\n", auth_len, auth_buf);
         } else if (a == K_CONFIRM) {
             auth_buf[auth_len] = 0;
             memcpy(st->auth_buf, auth_buf, auth_len);
@@ -226,7 +225,7 @@ void *taxi_key_thread(void *arg) {
         } else if (a == K_CLOSE) {
             st->door_open = 0;
             hal_servo_angle(st->servo_fd, st->cfg.door_close_angle);
-            printf("[DOOR] close\n");
+            printf("[车门] 关闭\n");
         } else if (a == K_PREV) {
             st->disp_idx = (st->disp_idx + display_mgr_count() - 1) % display_mgr_count();
             display_mgr_show_item(st, st->disp_idx, 1);
@@ -251,10 +250,10 @@ void *taxi_rfid_thread(void *arg) {
             pthread_mutex_lock(&st->lock);
             memcpy(st->card, card, 4); st->has_card = 1;
             st->door_open = 1;
-            st->last_key = time(NULL);   /* 刷卡开门视为一次操作，参与10s超时计时 */
+            st->last_key = time(NULL);   /* 刷卡开门视为一次操作，刷新空闲计时 */
             pthread_mutex_unlock(&st->lock);
             hal_servo_angle(st->servo_fd, st->cfg.door_open_angle);
-            printf("[RFID] card %02X%02X%02X%02X, door open\n",
+            printf("[刷卡] 卡号 %02X%02X%02X%02X，车门打开\n",
                    card[0], card[1], card[2], card[3]);
             usleep(500000);
         } else {
@@ -339,31 +338,21 @@ void *taxi_smoke_thread(void *arg) {
 
 void *taxi_cycle_thread(void *arg) {
     app_state *st = (app_state *)arg;
-    int cleared = 1;                    /* 开机数码管可能是残留内容，先清一次 */
+    int pos = 0;                       /* 轮播游标 */
     sleep(1);
     pthread_mutex_lock(&st->lock);
-    hal_display_clear(st->display_fd);
+    hal_display_clear(st->display_fd);  /* 开机清一次残留 */
     pthread_mutex_unlock(&st->lock);
     while (1) {
         sleep(1);
         pthread_mutex_lock(&st->lock);
-        time_t now = time(NULL);
-        int idle10 = (now - st->last_key >= 10);
-        /* 车门自动关：开门后 10 秒无任何操作（按键/刷卡/认证） */
-        if (st->door_open && idle10) {
-            st->door_open = 0;
-            hal_servo_angle(st->servo_fd, st->cfg.door_close_angle);
-            printf("[DOOR] auto close (10s idle)\n");
-        }
-        if (idle10) {
-            /* 空闲超时：数码管自动熄灭（旧内容全清），按键或事件后自动恢复显示 */
-            if (!cleared) {
-                hal_display_clear(st->display_fd);
-                cleared = 1;
-                printf("[DISP] idle 10s, display off\n");
-            }
-        } else {
-            cleared = 0;
+        if (time(NULL) - st->last_key >= 10) {
+            /* 空闲轮播：每 3 秒切换一项，仅数码管显示，控制台无输出（验收 §B）*/
+            pthread_mutex_unlock(&st->lock);
+            display_mgr_show_item(st, pos, 0);
+            pos = (pos + 1) % display_mgr_count();
+            sleep(3);
+            pthread_mutex_lock(&st->lock);
         }
         pthread_mutex_unlock(&st->lock);
     }

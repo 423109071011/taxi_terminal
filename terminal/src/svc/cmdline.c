@@ -12,7 +12,6 @@ static void print_help(void) {
     printf("commands:\n");
     printf("  ? / help                 show this help\n");
     printf("  info                     show current sensor values\n");
-    printf("  servo [0-180]            no arg: sweep test; with angle: set angle\n");
     printf("  uppath <coord-file>      upload history path to server\n");
 }
 
