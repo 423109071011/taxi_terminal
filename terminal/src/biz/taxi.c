@@ -329,19 +329,24 @@ void *taxi_smoke_thread(void *arg) {
 
 void *taxi_cycle_thread(void *arg) {
     app_state *st = (app_state *)arg;
+    int cleared = 1;                    /* 开机数码管可能是残留内容，先清一次 */
+    sleep(1);
+    pthread_mutex_lock(&st->lock);
+    hal_display_clear(st->display_fd);
+    pthread_mutex_unlock(&st->lock);
     while (1) {
         sleep(1);
         pthread_mutex_lock(&st->lock);
         time_t now = time(NULL);
         if (now - st->last_key >= 10) {
-            /* 轮播：每项 3 秒，只显示数码管不写控制台 */
-            for (int i = 0; i < display_mgr_count(); i++) {
-                display_mgr_show_item(st, i, 0);
-                pthread_mutex_unlock(&st->lock);
-                sleep(3);
-                pthread_mutex_lock(&st->lock);
+            /* 空闲超时：数码管自动熄灭（旧内容全清），按键或事件后自动恢复显示 */
+            if (!cleared) {
+                hal_display_clear(st->display_fd);
+                cleared = 1;
+                printf("[DISP] idle 10s, display off\n");
             }
-            st->last_key = now;
+        } else {
+            cleared = 0;
         }
         pthread_mutex_unlock(&st->lock);
     }

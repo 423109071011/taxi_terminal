@@ -7,23 +7,26 @@
 
 /*
  * FS6818 数码管实际驱动 = key-zlg72128.ko（misc 设备 /dev/zlg72128-0）。
- * ioctl DISP_NUM 语义（2026-09-18 disp_test 板端实测确认）：
- *   - 参数是段码，原样写入芯片显示缓冲；
- *   - 新值进入最左位，旧内容整体右移一位（滚动效果）。
+ * 本仓库 board_driver/zlg72128/ 为增强版驱动，在原厂基础上实现了
+ * DISPBUF_SET（ioctl 'F'/4）：应用层传 8 字节段码指针，整屏直写，
+ * 不经过 DISP_NUM 的移位逻辑——旧版驱动最左位为 0 后不再移位，
+ * 短字符串右侧旧内容永远残留（表现为乱码），无法清屏。
+ *
  * 段码表：0=0x3F 1=0x06 2=0x5B 3=0x4F 4=0x66 5=0x6D 6=0x7D 7=0x07
  *         8=0x7F 9=0x6F A=0x77 B=0x7C C=0x39 D=0x5E E=0x79 F=0x71
- *         '-'=0x40 ' '=0x00
+ *         '-'=0x40 灭=0x00
  *
- * hal_display_char    ：只送一个字符（键盘录入用，新数字从最左位滚入）
- * hal_display_string  ：整串渲染，从右往左逐字送入，
- *                       最终从左到右恰好显示该串（旧内容被推出屏幕右侧）
- * 注意：驱动 DISP_NUM 一旦最左位为 0 就不再移位，因此无法用送 0 的方式
- *       清屏——靠新字符串把旧内容"推"出去。
+ * hal_display_char    ：单字符滚入最左位（键盘录入，用 DISP_NUM）
+ * hal_display_string  ：整串左对齐渲染，右侧全灭（用 DISPBUF_SET，
+ *                       旧驱动回退为移位推入法，右侧可能有残留）
+ * hal_display_clear   ：全灭（DISPBUF_SET 真·清屏；旧驱动尽力推 0）
  */
 #define ZLG72128_MAGIC                  'F'
 #define ZLG72128_DIGITRON_DISP_NUM      _IOC(_IOC_WRITE, ZLG72128_MAGIC, 3, 0)
+#define ZLG72128_DIGITRON_DISPBUF_SET   _IOC(_IOC_WRITE, ZLG72128_MAGIC, 4, 0)
 
 static int fd_zlg = -1;
+static int has_buf_set = -1;    /* -1 未探测 / 1 支持 / 0 不支持(旧驱动) */
 
 static int seg_code(char c) {
     switch (c) {
@@ -46,19 +49,35 @@ static int feed_seg(int seg) {
     return ioctl(fd_zlg, ZLG72128_DIGITRON_DISP_NUM, seg) < 0 ? -1 : 0;
 }
 
+/* 整屏直写：buf[0]=最左位 ... buf[7]=最右位。返回 0 成功，-1 不支持 */
+static int disp_buf_set(const unsigned char buf[8]) {
+    if (fd_zlg < 0) return -1;
+    if (has_buf_set == 0) return -1;
+    if (ioctl(fd_zlg, ZLG72128_DIGITRON_DISPBUF_SET, buf) < 0) {
+        has_buf_set = 0;                /* 旧驱动：无此命令 */
+        return -1;
+    }
+    has_buf_set = 1;
+    return 0;
+}
+
 int hal_display_open(void) {
     fd_zlg = open("/dev/zlg72128-0", O_RDWR);
     if (fd_zlg < 0) {
         perror("open /dev/zlg72128-0 (insmod key-zlg72128.ko first)");
         return -1;
     }
+    has_buf_set = -1;
     return 0;
 }
 
 int hal_display_clear(int fd) {
+    unsigned char buf[8];
     (void)fd;
     if (fd_zlg < 0) return -1;
-    /* 送一段非0再送0，尽量把旧内容推出；驱动限制下无法完全清屏 */
+    memset(buf, 0x00, sizeof(buf));
+    if (disp_buf_set(buf) == 0) return 0;
+    /* 旧驱动回退：送 0 尽量清最左位（右侧可能残留，属已知驱动限制） */
     for (int i = 0; i < 8; i++) feed_seg(0x00);
     return 0;
 }
@@ -73,20 +92,23 @@ int hal_display_char(char c) {
 }
 
 int hal_display_string(int fd, const char *s) {
-    int n = 0, i;
-    int segs[8];
+    unsigned char buf[8];
+    int n = 0;
     (void)fd;
     if (fd_zlg < 0) return -1;
-    /* 从右往左逐字送入：最后送的是 s[0]，落在最左位 */
-    for (const char *p = s + strlen(s) - 1; p >= s && n < 8; p--) {
+    memset(buf, 0x00, sizeof(buf));
+    /* 左对齐填入可显字符，右侧全灭 */
+    for (const char *p = s; *p && n < 8; p++) {
         char c = *p;
         int seg;
         if (c >= 'a' && c <= 'z') c -= 32;
         seg = seg_code(c);
         if (seg < 0) continue;          /* 7段码显示不了的字符跳过 */
-        segs[n++] = seg;
+        buf[n++] = (unsigned char)seg;
     }
-    for (i = n - 1; i >= 0; i--) feed_seg(segs[i]);
+    if (disp_buf_set(buf) == 0) return 0;
+    /* 旧驱动回退：从右往左移位推入（短串右侧会残留旧内容） */
+    for (int i = n - 1; i >= 0; i--) feed_seg(buf[i]);
     return 0;
 }
 
