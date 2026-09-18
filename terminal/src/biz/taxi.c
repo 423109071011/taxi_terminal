@@ -165,16 +165,25 @@ static int taxi_handle_buzzer(unsigned short id, const unsigned char *b, int len
     return 0;
 }
 
-/* 0x8110 身份验证应答 */
+/* 0x8110 身份验证应答：通过 → 开车门(舵机90°)，失败仅提示 */
 int taxi_handle_auth_resp(unsigned short id, const unsigned char *b, int len) {
     (void)id;
     app_state *st = g_st;
     if (len < 1) return -1;
     pthread_mutex_lock(&st->lock);
     st->verified = (b[0] == 0) ? 1 : -1;
+    int v = st->verified;
+    if (v == 1) {
+        st->door_open = 1;
+        st->last_key = time(NULL);   /* 开门也视为一次操作，参与10s超时计时 */
+    }
     pthread_mutex_unlock(&st->lock);
-    hal_display_string(st->display_fd, st->verified == 1 ? "PASS" : "FAIL");
+    hal_display_string(st->display_fd, v == 1 ? "PASS" : "FAIL");
+    if (v == 1 && st->servo_fd >= 0)
+        hal_servo_angle(st->servo_fd, st->cfg.door_open_angle);
     hal_beep_on(st->beep_fd); usleep(200000); hal_beep_off(st->beep_fd);
+    printf("[AUTH] %s%s\n", v == 1 ? "PASS" : "FAIL",
+           v == 1 ? ", door open" : "");
     return 0;
 }
 
@@ -242,6 +251,7 @@ void *taxi_rfid_thread(void *arg) {
             pthread_mutex_lock(&st->lock);
             memcpy(st->card, card, 4); st->has_card = 1;
             st->door_open = 1;
+            st->last_key = time(NULL);   /* 刷卡开门视为一次操作，参与10s超时计时 */
             pthread_mutex_unlock(&st->lock);
             hal_servo_angle(st->servo_fd, st->cfg.door_open_angle);
             printf("[RFID] card %02X%02X%02X%02X, door open\n",
@@ -338,7 +348,14 @@ void *taxi_cycle_thread(void *arg) {
         sleep(1);
         pthread_mutex_lock(&st->lock);
         time_t now = time(NULL);
-        if (now - st->last_key >= 10) {
+        int idle10 = (now - st->last_key >= 10);
+        /* 车门自动关：开门后 10 秒无任何操作（按键/刷卡/认证） */
+        if (st->door_open && idle10) {
+            st->door_open = 0;
+            hal_servo_angle(st->servo_fd, st->cfg.door_close_angle);
+            printf("[DOOR] auto close (10s idle)\n");
+        }
+        if (idle10) {
             /* 空闲超时：数码管自动熄灭（旧内容全清），按键或事件后自动恢复显示 */
             if (!cleared) {
                 hal_display_clear(st->display_fd);
