@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
     pthread_create(&t_smoke, NULL, taxi_smoke_thread,&st);
     pthread_create(&t_cycle, NULL, taxi_cycle_thread,&st);
 
-    printf("init done. 输入 ? 或 help 查看命令\n");
+    printf("init done. \xca\xe4\xc8\xeb ? \xbb\xf2 help \xb2\xe9\xbf\xb4\xc3\xfc\xc1\xee\n");
     cmdline_loop(&st);   /* 主线程只读 stdin */
     hal_beep_off(st.beep_fd);   /* 退出前关掉蜂鸣器，避免余音 */
     return 0;

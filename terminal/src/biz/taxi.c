@@ -215,7 +215,8 @@ void *taxi_key_thread(void *arg) {
         if (a == K_DIGIT) {
             if (auth_len < 6) { auth_buf[auth_len++] = d; auth_buf[auth_len] = 0; }
             hal_display_char(d);   /* 新数字滚入最左位，旧数字右移 */
-            printf("[身份码输入] %.*s\n", auth_len, auth_buf);
+            /* 串口终端按 GBK 解码，中文用 GBK 字节转义，避免乱码 */
+            printf("[\xc9\xed\xb7\xdd\xc2\xeb\xca\xe4\xc8\xeb] %.*s\n", auth_len, auth_buf);
         } else if (a == K_CONFIRM) {
             auth_buf[auth_len] = 0;
             memcpy(st->auth_buf, auth_buf, auth_len);
@@ -225,7 +226,7 @@ void *taxi_key_thread(void *arg) {
         } else if (a == K_CLOSE) {
             st->door_open = 0;
             hal_servo_angle(st->servo_fd, st->cfg.door_close_angle);
-            printf("[车门] 关闭\n");
+            printf("[\xb3\xb5\xc3\xc5] \xb9\xd8\xb1\xd5\n");
         } else if (a == K_PREV) {
             st->disp_idx = (st->disp_idx + display_mgr_count() - 1) % display_mgr_count();
             display_mgr_show_item(st, st->disp_idx, 1);
@@ -253,7 +254,7 @@ void *taxi_rfid_thread(void *arg) {
             st->last_key = time(NULL);   /* 刷卡开门视为一次操作，刷新空闲计时 */
             pthread_mutex_unlock(&st->lock);
             hal_servo_angle(st->servo_fd, st->cfg.door_open_angle);
-            printf("[刷卡] 卡号 %02X%02X%02X%02X，车门打开\n",
+            printf("[\xcb\xa2\xbf\xa8] \xbf\xa8\xba\xc5 %02X%02X%02X%02X\xa3\xac\xb3\xb5\xc3\xc5\xb4\xf2\xbf\xaa\n",
                    card[0], card[1], card[2], card[3]);
             usleep(500000);
         } else {
