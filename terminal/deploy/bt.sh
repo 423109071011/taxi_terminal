@@ -56,9 +56,15 @@ mk_misc  beep       /dev/beep
 mk_misc  servo      /dev/servo
 mk_chr   rfid       /dev/rfid_module0 8
 [ -c /dev/led ] || mknod /dev/led c 500 0 2>/dev/null
-[ -c /dev/input/event0 ] || mknod /dev/input/event0 c 13 64 2>/dev/null
-# i2cKEY 的 eventX 次设备号动态，若上面的 event0 不对则按 /proc/bus/input/devices 手动补
+# input event 次设备号动态（i2cKEY 常在 event4），一次建全 event0~7，
+# key.c 按 EVIOCGNAME=i2cKEY 识别，多余的节点不影响
+i=0
+while [ $i -le 7 ]; do
+    [ -c /dev/input/event$i ] || { mkdir -p /dev/input; mknod /dev/input/event$i c 13 $((64+i)) 2>/dev/null; }
+    i=$((i+1))
+done
 chmod 666 /dev/zlg72128-0 /dev/beep /dev/servo /dev/rfid_module0 /dev/led 2>/dev/null
+chmod 666 /dev/input/event* 2>/dev/null
 
 echo "drivers ready:"
 ls /dev/zlg72128-0 /dev/rfid_module0 /dev/beep /dev/servo /dev/led 2>/dev/null
