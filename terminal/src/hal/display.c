@@ -32,7 +32,13 @@ static int seg_code(char c) {
         case '6': return 0x7D; case '7': return 0x07; case '8': return 0x7F;
         case '9': return 0x6F; case 'A': return 0x77; case 'B': return 0x7C;
         case 'C': return 0x39; case 'D': return 0x5E; case 'E': return 0x79;
-        case 'F': return 0x71; case '-': return 0x40; default:  return -1;
+        case 'F': return 0x71; case '-': return 0x40;
+        /* 扩展字母（7段数码管惯用近似字形），供状态词显示 */
+        case 'G': return 0x3D; case 'H': return 0x76; case 'I': return 0x30;
+        case 'J': return 0x1E; case 'L': return 0x38; case 'N': return 0x54;
+        case 'O': return 0x3F; case 'P': return 0x73; case 'S': return 0x6D;
+        case 'T': return 0x78; case 'U': return 0x3E; case 'Y': return 0x6E;
+        default:  return -1;
     }
 }
 
@@ -60,7 +66,7 @@ int hal_display_clear(int fd) {
 int hal_display_char(char c) {
     int seg;
     if (fd_zlg < 0) return -1;
-    if (c >= 'a' && c <= 'f') c -= 32;
+    if (c >= 'a' && c <= 'z') c -= 32;
     seg = seg_code(c);
     if (seg < 0) return 0;   /* 不可显示字符：跳过 */
     return feed_seg(seg);
@@ -75,7 +81,7 @@ int hal_display_string(int fd, const char *s) {
     for (const char *p = s + strlen(s) - 1; p >= s && n < 8; p--) {
         char c = *p;
         int seg;
-        if (c >= 'a' && c <= 'f') c -= 32;
+        if (c >= 'a' && c <= 'z') c -= 32;
         seg = seg_code(c);
         if (seg < 0) continue;          /* 7段码显示不了的字符跳过 */
         segs[n++] = seg;

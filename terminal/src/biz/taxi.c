@@ -22,11 +22,11 @@ static char *g_card(app_state *st) {
     return b;
 }
 static char *g_verify(app_state *st) {
-    return st->verified == 1 ? "PASS" : st->verified == -1 ? "FAIL" : "----";
+    return st->verified == 1 ? "PASS" : st->verified == -1 ? "FAIL" : "IDLE";
 }
-static char *g_door(app_state *st) { return st->door_open ? "OPEN" : "CLOS"; }
-static char *g_fatigue(app_state *st) { return st->fatigue ? "FATIG" : "OK"; }
-static char *g_net(app_state *st) { return st->net_ok ? "NETOK" : "NET--"; }
+static char *g_door(app_state *st) { return st->door_open ? "OPEN" : "CLOSE"; }
+static char *g_fatigue(app_state *st) { return st->fatigue ? "FATIGUE" : "OK"; }
+static char *g_net(app_state *st) { return st->net_ok ? "ONLINE" : "OFFLINE"; }
 static char *g_gps(app_state *st) {
     static char b[16];
     snprintf(b, sizeof(b), "%d", st->gps.sats);
