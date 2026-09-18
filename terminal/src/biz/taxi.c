@@ -202,7 +202,7 @@ void *taxi_key_thread(void *arg) {
         pthread_mutex_lock(&st->lock);
         if (a == K_DIGIT) {
             if (auth_len < 6) { auth_buf[auth_len++] = d; auth_buf[auth_len] = 0; }
-            hal_display_string(st->display_fd, auth_buf);
+            hal_display_char(d);   /* 新数字滚入最左位，旧数字右移 */
             printf("[IDCODE] %.*s\n", auth_len, auth_buf);
         } else if (a == K_CONFIRM) {
             auth_buf[auth_len] = 0;
