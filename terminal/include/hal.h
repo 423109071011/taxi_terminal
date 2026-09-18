@@ -20,7 +20,7 @@ int hal_beep_open(void);
 void hal_beep_on(int fd);
 void hal_beep_off(int fd);
 int hal_servo_open(void);
-void hal_servo_angle(int fd, int angle);
+int hal_servo_angle(int fd, int angle);
 /* GPS：GGA 取时间/经纬度/星数，RMC 取日期（协议 0x0200 时间字段要用 UTC 日期+时间） */
 typedef struct {
     double lat, lon;

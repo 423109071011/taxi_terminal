@@ -12,7 +12,7 @@ static void print_help(void) {
     printf("commands:\n");
     printf("  ? / help                 show this help\n");
     printf("  info                     show current sensor values\n");
-    printf("  servo <0-180>            set servo angle (test)\n");
+    printf("  servo [0-180]            no arg: sweep test; with angle: set angle\n");
     printf("  uppath <coord-file>      upload history path to server\n");
 }
 
@@ -55,15 +55,25 @@ void cmdline_loop(app_state *st) {
         if (!strcmp(cmd, "?") || !strcmp(cmd, "help")) print_help();
         else if (!strcmp(cmd, "info")) print_info(st);
         else if (!strcmp(cmd, "servo")) {
-            if (arg[0]) {
+            if (st->servo_fd < 0) { printf("servo not available\n"); }
+            else if (!arg[0]) {
+                /* 无参数：扫动测试 0→90→180→90→0，动作直观 */
+                static const int seq[] = {0, 90, 180, 90, 0};
+                for (unsigned i = 0; i < sizeof(seq)/sizeof(seq[0]); i++) {
+                    int r = hal_servo_angle(st->servo_fd, seq[i]);
+                    printf("servo -> %d (ioctl ret=%d)\n", seq[i], r);
+                    fflush(stdout);
+                    sleep(1);
+                }
+            }
+            else {
                 int a = atoi(arg);
                 if (a < 0 || a > 180) { printf("angle 0-180\n"); }
-                else if (st->servo_fd < 0) { printf("servo not available\n"); }
                 else {
-                    hal_servo_angle(st->servo_fd, a);
-                    printf("servo -> %d deg (ret ioctl ok)\n", a);
+                    int r = hal_servo_angle(st->servo_fd, a);
+                    printf("servo -> %d deg (ioctl ret=%d, 0=ok)\n", a, r);
                 }
-            } else printf("usage: servo <0-180>\n");
+            }
         }
         else if (!strcmp(cmd, "uppath")) {
             if (arg[0]) uppath_upload(st, arg);

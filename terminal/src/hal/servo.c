@@ -8,8 +8,8 @@ int hal_servo_open(void) {
     if (fd < 0) perror("open servo");
     return fd;
 }
-void hal_servo_angle(int fd, int angle) {
+int hal_servo_angle(int fd, int angle) {
     if (angle < 0) angle = 0;
     if (angle > 180) angle = 180;
-    ioctl(fd, SET_ANGLE, angle);
+    return ioctl(fd, SET_ANGLE, angle);
 }
