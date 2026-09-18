@@ -28,7 +28,7 @@ int cfg_load(app_config_t *c, const char *path) {
     char line[256];
     set_defaults(c);
     f = fopen(path, "r");
-    if (!f) return 0;                 /* 文件缺失用默认值 */
+    if (!f) return 0;                 /* 文件缺失用默认值（返回 0 供调用方告警） */
     while (fgets(line, sizeof(line), f)) {
         char *eq, *k, *v;
         trim(line);
@@ -46,5 +46,5 @@ int cfg_load(app_config_t *c, const char *path) {
         else if (!strcmp(k, "door_close_angle")) c->door_close_angle = atoi(v);
     }
     fclose(f);
-    return 0;
+    return 1;                         /* 配置文件加载成功 */
 }

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include <pthread.h>
 #include "app.h"
 #include "hal.h"
@@ -32,10 +33,24 @@ void *net_task_run(void *arg) {
     jt808_decoder_t dec;
     jt808_decoder_init(&dec);
 
+    int retry = 0;
+
     for (;;) {
         int fd = hal_net_connect(st->cfg.server_ip, st->cfg.server_port);
-        if (fd < 0) { usleep(1000000); continue; }
+        if (fd < 0) {
+            /* 每秒重试，但每 5 次才打印一行，避免刷屏刷到看不见命令提示符 */
+            if (retry % 5 == 0) {
+                printf("[net] connect %s:%d failed (%s), retrying...\n",
+                       st->cfg.server_ip, st->cfg.server_port, strerror(errno));
+                fflush(stdout);
+            }
+            retry++;
+            usleep(1000000);
+            continue;
+        }
+        retry = 0;
         printf("connected to platform %s:%d\n", st->cfg.server_ip, st->cfg.server_port);
+        fflush(stdout);
         pthread_mutex_lock(&st->lock); st->net_ok = 1; st->net_fd = fd; pthread_mutex_unlock(&st->lock);
 
         /* 协议：连接建立后（实验免注册鉴权）立即上报一帧 0x0200 */
@@ -61,6 +76,8 @@ void *net_task_run(void *arg) {
         }
         pthread_mutex_lock(&st->lock); st->net_ok = 0; st->net_fd = -1; pthread_mutex_unlock(&st->lock);
         close(fd);
+        printf("[net] platform disconnected, retry in 2s\n");
+        fflush(stdout);
         usleep(2000000);
     }
     return NULL;

@@ -28,7 +28,15 @@ int main(int argc, char **argv) {
 
     memset(&st, 0, sizeof(st));
     pthread_mutex_init(&st.lock, NULL);
-    cfg_load(&st.cfg, cfgpath);
+    if (cfg_load(&st.cfg, cfgpath))
+        printf("[cfg] loaded %s -> platform %s:%d\n",
+               cfgpath, st.cfg.server_ip, st.cfg.server_port);
+    else {
+        printf("[cfg] WARNING: cannot open %s, using builtin defaults -> %s:%d\n",
+               cfgpath, st.cfg.server_ip, st.cfg.server_port);
+        printf("[cfg] hint: put config at /arduino_drivers/taxi.conf "
+               "or pass path as argv[1]\n");
+    }
     app_term_id_from_text(&st);
     st.serial = 1;
     st.disp_idx = 0;
