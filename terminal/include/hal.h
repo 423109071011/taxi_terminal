@@ -9,6 +9,9 @@ int hal_display_clear(int fd);
 int hal_display_string(int fd, const char *s);
 int hal_display_char(char c);
 int hal_display_number(int fd, long v, int width);
+/* adc */
+int hal_adc_open(void);          /* 打开 /dev/adc 并选烟雾通道(5) */
+int hal_adc_read(int fd);        /* 读 12 位原始值 0~4095，失败返回 -1 */
 int hal_rfid_open(void);
 int hal_rfid_read(int fd, unsigned char card[4]);
 int hal_led_open(void);

@@ -13,12 +13,13 @@ typedef struct {
     unsigned short serial;
     /* 设备句柄 */
     int net_fd;                     /* 当前网络套接字，net_task 维护 */
-    int key_fd, display_fd, rfid_fd, beep_fd, servo_fd, gps_fd;
+    int key_fd, display_fd, rfid_fd, beep_fd, servo_fd, gps_fd, adc_fd;
     /* 业务状态 */
     unsigned char card[4]; int has_card;
     int door_open;
     int verified;                   /* 0 未验证 / 1 准许 / -1 拒绝 */
     int fatigue;
+    int smoke_alarm;                /* 烟雾超标报警状态（滞回+连续确认后） */
     gps_fix_t gps;
     int net_ok;
     /* 身份码输入 */

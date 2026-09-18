@@ -32,6 +32,7 @@ static char *g_gps(app_state *st) {
     snprintf(b, sizeof(b), "%d", st->gps.sats);
     return b;
 }
+static char *g_smoke(app_state *st) { return st->smoke_alarm ? "GASYES" : "GASNO"; }
 
 /* ---------- 上报 ---------- */
 static void send_frame(app_state *st, unsigned short mid, const unsigned char *body, int len) {
@@ -82,7 +83,10 @@ void taxi_build_location_body(app_state *st, double lat, double lon,
                               unsigned char body[34]) {
     long ilat = (long)(lat * 1000000.0);
     long ilon = (long)(lon * 1000000.0);
-    long alarm = st->fatigue ? 0x00000004L : 0L;
+    /* 报警标志：bit2=疲劳驾驶(JT/T808)，bit0=紧急报警（此处用作车内烟雾超标） */
+    long alarm = 0;
+    if (st->fatigue)    alarm |= 0x00000004L;
+    if (st->smoke_alarm) alarm |= 0x00000001L;
     long status = 0;
     int yy = 0, mm = 0, dd = 0, hh = 0, mi = 0, ss = 0;
 
@@ -268,14 +272,57 @@ void *taxi_gps_thread(void *arg) {
 void *taxi_beep_thread(void *arg) {
     app_state *st = (app_state *)arg;
     while (1) {
-        int fatigue;
-        pthread_mutex_lock(&st->lock); fatigue = st->fatigue; pthread_mutex_unlock(&st->lock);
-        if (fatigue) {
+        int fatigue, smoke;
+        pthread_mutex_lock(&st->lock);
+        fatigue = st->fatigue; smoke = st->smoke_alarm;
+        pthread_mutex_unlock(&st->lock);
+        if (fatigue || smoke) {
             hal_beep_on(st->beep_fd); usleep(300000);
             hal_beep_off(st->beep_fd); usleep(300000);
         } else {
             usleep(100000);
         }
+    }
+    return NULL;
+}
+
+/* ---------- 烟雾传感器采集（滞回 + 连续确认，防阈值抖动） ----------
+ * 报警开启：连续 SMOKE_CONSEC 次采样 >= SMOKE_TH_ON
+ * 报警解除：连续 SMOKE_CONSEC 次采样 <= SMOKE_TH_OFF（低于开启阈值 SMOKE_HYST）
+ * 这样值在阈值附近跳动时不会频繁启停蜂鸣器/报警位。 */
+#define SMOKE_TH_ON     2000    /* 报警开启阈值（12位AD，0~4095），可按传感器实测调整 */
+#define SMOKE_HYST      200     /* 滞回区间 */
+#define SMOKE_TH_OFF    (SMOKE_TH_ON - SMOKE_HYST)
+#define SMOKE_CONSEC    3       /* 连续确认次数 */
+#define SMOKE_PERIOD_MS 500     /* 采样周期 */
+
+void *taxi_smoke_thread(void *arg) {
+    app_state *st = (app_state *)arg;
+    int hi = 0, lo = 0;
+    if (st->adc_fd < 0) { printf("smoke: adc not available, sensor thread off\n"); return NULL; }
+    while (1) {
+        int v = hal_adc_read(st->adc_fd);
+        if (v >= 0) {
+            pthread_mutex_lock(&st->lock);
+            int st_now = st->smoke_alarm;
+            pthread_mutex_unlock(&st->lock);
+            hi = (v >= SMOKE_TH_ON)  ? hi + 1 : 0;
+            lo = (v <= SMOKE_TH_OFF) ? lo + 1 : 0;
+            if (!st_now && hi >= SMOKE_CONSEC) {
+                pthread_mutex_lock(&st->lock);
+                st->smoke_alarm = 1;
+                pthread_mutex_unlock(&st->lock);
+                printf("[SMOKE] alarm ON (adc=%d >= %d)\n", v, SMOKE_TH_ON);
+                taxi_report_location(st);   /* 状态变化立即上报 */
+            } else if (st_now && lo >= SMOKE_CONSEC) {
+                pthread_mutex_lock(&st->lock);
+                st->smoke_alarm = 0;
+                pthread_mutex_unlock(&st->lock);
+                printf("[SMOKE] alarm OFF (adc=%d <= %d)\n", v, SMOKE_TH_OFF);
+                taxi_report_location(st);
+            }
+        }
+        usleep(SMOKE_PERIOD_MS * 1000);
     }
     return NULL;
 }
@@ -310,6 +357,7 @@ int taxi_init(app_state *st) {
     st->beep_fd = hal_beep_open();
     st->servo_fd = hal_servo_open();
     st->gps_fd = hal_gps_open();
+    st->adc_fd = hal_adc_open();
     st->net_fd = -1;
 
     display_mgr_register(0, "CARD", g_card);
@@ -318,6 +366,7 @@ int taxi_init(app_state *st) {
     display_mgr_register(3, "FATIGUE", g_fatigue);
     display_mgr_register(4, "NET", g_net);
     display_mgr_register(5, "GPS-SATS", g_gps);
+    display_mgr_register(6, "SMOKE", g_smoke);
 
     dispatch_register(MSG_PLAT_ACK,  taxi_handle_plat_ack);
     dispatch_register(MSG_BUZZER,    taxi_handle_buzzer);
