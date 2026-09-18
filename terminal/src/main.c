@@ -23,7 +23,7 @@ static void on_signal(int sig) {
 
 int main(int argc, char **argv) {
     app_state st;
-    const char *cfgpath = (argc > 1) ? argv[1] : "deploy/config";
+    const char *cfgpath = (argc > 1) ? argv[1] : "/arduino_drivers/taxi.conf";
     pthread_t t_key, t_rfid, t_gps, t_beep, t_cycle, t_led, t_net;
 
     memset(&st, 0, sizeof(st));
