@@ -33,10 +33,13 @@ int cfg_load(app_config_t *c, const char *path) {
         char *eq, *k, *v;
         trim(line);
         if (line[0] == '#' || line[0] == '\0') continue;
-        eq = strchr(line, '=');
-        if (!eq) continue;
+        /* 键值分隔符同时支持 '=' 与空白，避免写成 "server_ip 1.2.3.4" 时被静默忽略 */
+        for (eq = line; *eq && *eq != '=' && *eq != ' ' && *eq != '\t'; eq++)
+            ;
+        if (!*eq) continue;             /* 没有值的行，跳过 */
         *eq = '\0';
         k = line; v = eq + 1; trim(k); trim(v);
+        if (!*v) continue;
         if      (!strcmp(k, "server_ip"))        strncpy(c->server_ip, v, 31);
         else if (!strcmp(k, "server_port"))      c->server_port = atoi(v);
         else if (!strcmp(k, "terminal_id"))      strncpy(c->terminal_id, v, 12);
@@ -44,6 +47,7 @@ int cfg_load(app_config_t *c, const char *path) {
         else if (!strcmp(k, "password_len"))     c->password_len = atoi(v);
         else if (!strcmp(k, "door_open_angle"))  c->door_open_angle = atoi(v);
         else if (!strcmp(k, "door_close_angle")) c->door_close_angle = atoi(v);
+        else printf("[cfg] unknown key '%s' in %s, ignored\n", k, path);
     }
     fclose(f);
     return 1;                         /* 配置文件加载成功 */
