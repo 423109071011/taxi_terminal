@@ -49,6 +49,7 @@ int hal_key_read(int fd, unsigned int *code) {
     for (;;) {
         ssize_t n = read(fd, &ev, sizeof(ev));
         if (n != (ssize_t)sizeof(ev)) continue;
+        printf("[KEYRAW] type=%u code=%u value=%d\n", ev.type, ev.code, ev.value);
         if (ev.type == EV_KEY && ev.value == 1) {   /* 仅按下沿 */
             *code = ev.code;
             return 1;
