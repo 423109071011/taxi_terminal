@@ -19,7 +19,8 @@ int key_map(unsigned int code, char *digit) {
     if (code == 4)  return K_CONFIRM;   /* '*'  也当确认 */
     if (code == 24) return K_PREV;      /* 'A'  前翻页（实测标定） */
     if (code == 16) return K_NEXT;      /* 'B'  后翻页（实测标定） */
-    if (code == 1)  return K_DISMISS;   /* 'D'  解除报警（2026-09-21 实测：
-                                        * 内核打印 press common key 0x01） */
+    if (code == 29) return K_DISMISS;   /* 'D'  解除报警（2026-09-21 [KEYRAW] 实测：
+                                        * 内核打印 press common key 0x01 是驱动内部
+                                        * 扫描码，input 事件 ev.code 实为 29） */
     return K_NONE;
 }
