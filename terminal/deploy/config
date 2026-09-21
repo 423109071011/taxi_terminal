@@ -1,7 +1,7 @@
 # 出租车终端联调配置
-# 平台地址：默认连 Windows 主机有线网口（网络调试助手 / fake_platform.py 监听 8888）
-server_ip=192.168.1.101
-server_port=8888
+# 平台地址：真实车载平台（联调说明 2026-09-21）
+server_ip=115.29.177.207
+server_port=8899
 # 终端ID（BCD[6]，12个数字字符）
 terminal_id=091111222200
 # 终端手机号（BCD[6]，可省略，省略时用 terminal_id）
