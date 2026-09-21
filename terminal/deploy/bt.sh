@@ -51,12 +51,14 @@ load rfid_driver.ko      # RFID   字符设备 rfid，minor 固定 8 → /dev/rf
 load beep_driver.ko      # 蜂鸣器 红圈 GPIOC14 → /dev/beep（改造版：高电平响、低电平静音）
 # load fs6818_pwm.ko     # PWM 方式驱动，已弃用：定时器共享且停表后引脚常高 → 蜂鸣器长鸣
 load servo.ko            # 舵机   misc → /dev/servo
+load adc_driver.ko       # ADC    misc → /dev/adc（烟雾传感器模拟量输入）
 load fs6818_led.ko       # 状态灯 主设备号静态 500 → /dev/led
 
 # ---- 补建设备节点（板子无 devtmpfs/udev，重启后节点会丢）----
 mk_misc  zlg72128-0 /dev/zlg72128-0
 mk_misc  beep       /dev/beep
 mk_misc  servo      /dev/servo
+mk_misc  adc        /dev/adc
 mk_chr   rfid       /dev/rfid_module0 8
 [ -c /dev/led ] || mknod /dev/led c 500 0 2>/dev/null
 # input event 次设备号动态（i2cKEY 常在 event4），一次建全 event0~7，
@@ -66,7 +68,7 @@ while [ $i -le 7 ]; do
     [ -c /dev/input/event$i ] || { mkdir -p /dev/input; mknod /dev/input/event$i c 13 $((64+i)) 2>/dev/null; }
     i=$((i+1))
 done
-chmod 666 /dev/zlg72128-0 /dev/beep /dev/servo /dev/rfid_module0 /dev/led 2>/dev/null
+chmod 666 /dev/zlg72128-0 /dev/beep /dev/servo /dev/adc /dev/rfid_module0 /dev/led 2>/dev/null
 chmod 666 /dev/input/event* 2>/dev/null
 
 echo "drivers ready:"
