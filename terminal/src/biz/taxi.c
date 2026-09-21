@@ -243,6 +243,14 @@ void *taxi_key_thread(void *arg) {
         } else if (a == K_NEXT) {
             st->disp_idx = (st->disp_idx + 1) % display_mgr_count();
             display_mgr_show_item(st, st->disp_idx, 1);
+        } else if (a == K_DISMISS) {
+            /* 解除报警：清疲劳/烟雾标志，蜂鸣线程下个周期自动停响 */
+            if (st->fatigue || st->smoke_alarm) {
+                st->fatigue = 0;
+                st->smoke_alarm = 0;
+                printf("[KEY] code=%u alarm dismissed (fatigue/smoke cleared)\n", code);
+                hal_display_string(st->display_fd, "OK");
+            }
         }
         st->last_key = time(NULL);
         pthread_mutex_unlock(&st->lock);
