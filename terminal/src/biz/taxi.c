@@ -53,7 +53,9 @@ int taxi_send_term_ack(app_state *st, unsigned short ack_seq, unsigned short ack
     body[2] = ack_id >> 8;   body[3] = ack_id & 0xFF;
     body[4] = result;
     send_frame(st, MSG_TERM_ACK, body, 5);
-    printf("[TX] TERM-ACK seq=%u id=0x%04X result=%u\n", ack_seq, ack_id, result);
+    /* 正常应答不打印，避免每秒心跳刷屏；仅异常时提示 */
+    if (result != 0)
+        printf("[TX] TERM-ACK seq=%u id=0x%04X result=%u (FAIL)\n", ack_seq, ack_id, result);
     return 0;
 }
 
@@ -151,8 +153,9 @@ static int taxi_handle_plat_ack(unsigned short id, const unsigned char *b, int l
     if (len < 5) return -1;
     unsigned short aseq = (b[0] << 8) | b[1];
     unsigned short aid  = (b[2] << 8) | b[3];
-    printf("[RX] PLAT-ACK: my_seq=%u msgID=0x%04X result=%u (%s)\n",
-           aseq, aid, b[4], b[4] == 0 ? "OK" : "FAIL");
+    /* 正常 OK 静音（每秒心跳都会应答），仅失败时提示 */
+    if (b[4] != 0)
+        printf("[RX] PLAT-ACK: my_seq=%u msgID=0x%04X result=%u (FAIL)\n", aseq, aid, b[4]);
     return 0;
 }
 
