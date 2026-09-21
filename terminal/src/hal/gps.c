@@ -3,9 +3,38 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <termios.h>
 #include "hal.h"
 
+/*
+ * EC20 的 GNSS 引擎出厂默认关闭：必须先在 AT 口(ttyUSB2)发 AT+QGPS=1，
+ * NMEA 口(ttyUSB1)才会有数据流，否则永远静默、sats 恒为 0。
+ * 重复开启模块回 ERROR，无害；模块不在时静默返回。
+ */
+static void ec20_gps_enable(void) {
+    int fd = open("/dev/ttyUSB2", O_RDWR | O_NOCTTY);
+    if (fd < 0) return;                    /* 模块未接，静默 */
+    struct termios t;
+    if (tcgetattr(fd, &t) == 0) {
+        cfmakeraw(&t);
+        cfsetispeed(&t, B115200);
+        cfsetospeed(&t, B115200);
+        t.c_cflag |= CLOCAL | CREAD;
+        tcsetattr(fd, TCSANOW, &t);
+    }
+    if (write(fd, "AT+QGPS=1\r", 10) < 0) { close(fd); return; }
+    usleep(500000);                        /* 等模块应答 */
+    char rsp[64] = {0};
+    read(fd, rsp, sizeof(rsp) - 1);
+    printf("[gps] AT+QGPS=1 -> %s\n",
+           strstr(rsp, "OK")    ? "GNSS started" :
+           strstr(rsp, "ERROR") ? "already on"   : "no ack (continuing)");
+    close(fd);
+    sleep(1);                              /* 引擎启动缓冲 */
+}
+
 int hal_gps_open(void) {
+    ec20_gps_enable();
     int fd = open("/dev/ttyUSB1", O_RDWR | O_NOCTTY | O_NONBLOCK);
     if (fd < 0) printf("gps: not available (EC20 not attached), continue without GPS\n");
     return fd;
