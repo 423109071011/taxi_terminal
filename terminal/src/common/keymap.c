@@ -19,8 +19,7 @@ int key_map(unsigned int code, char *digit) {
     if (code == 4)  return K_CONFIRM;   /* '*'  也当确认 */
     if (code == 24) return K_PREV;      /* 'A'  前翻页（实测标定） */
     if (code == 16) return K_NEXT;      /* 'B'  后翻页（实测标定） */
-    /* 未知键值（含 'D'，码值未标定）一律当"解除报警"：按下清除疲劳/烟雾
-     * 报警并停蜂鸣；taxi_key_thread 会打印 raw code，按一次 D 即完成标定，
-     * 后续可把 return K_DISMISS 收紧成 if (code == <实测D键值>)。 */
-    return K_DISMISS;
+    if (code == 1)  return K_DISMISS;   /* 'D'  解除报警（2026-09-21 实测：
+                                        * 内核打印 press common key 0x01） */
+    return K_NONE;
 }
