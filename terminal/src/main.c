@@ -53,6 +53,8 @@ int main(int argc, char **argv) {
     pthread_create(&t_key,   NULL, taxi_key_thread, &st);
     pthread_create(&t_rfid,  NULL, taxi_rfid_thread,&st);
     pthread_create(&t_gps,   NULL, taxi_gps_thread, &st);
+    pthread_t t_hb;
+    pthread_create(&t_hb,    NULL, taxi_heartbeat_thread, &st);
     pthread_create(&t_beep,  NULL, taxi_beep_thread,&st);
     pthread_t t_smoke;
     pthread_create(&t_smoke, NULL, taxi_smoke_thread,&st);

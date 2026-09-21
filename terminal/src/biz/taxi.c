@@ -271,6 +271,18 @@ void *taxi_rfid_thread(void *arg) {
     return NULL;
 }
 
+/* 兜底心跳：独立线程每秒上报一帧 0x0200（不依赖 GPS 是否定位/解析）。
+ * 平台侧 IdleStateHandler 读空闲超时(30s/180s)会关闭连接，
+ * 心跳必须严格 1s 周期，且不能挂在可能阻塞的 GPS read() 上。 */
+void *taxi_heartbeat_thread(void *arg) {
+    app_state *st = (app_state *)arg;
+    while (1) {
+        taxi_report_location(st);
+        usleep(1000000);
+    }
+    return NULL;
+}
+
 void *taxi_gps_thread(void *arg) {
     app_state *st = (app_state *)arg;
     char buf[512];
@@ -278,10 +290,8 @@ void *taxi_gps_thread(void *arg) {
         int n = read(st->gps_fd, buf, sizeof(buf) - 1);
         if (n <= 0) { usleep(500000); continue; }
         buf[n] = 0;
-        if (hal_gps_parse(buf, n, &st->gps) == 1) {
-            taxi_report_location(st);
-        }
-        usleep(1000000);
+        /* 只负责解析更新 st->gps；上报由 heartbeat 线程统一每秒执行 */
+        hal_gps_parse(buf, n, &st->gps);
     }
     return NULL;
 }

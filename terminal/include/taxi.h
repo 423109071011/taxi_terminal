@@ -5,6 +5,7 @@ int taxi_init(app_state *st);
 void *taxi_key_thread(void *);
 void *taxi_rfid_thread(void *);
 void *taxi_gps_thread(void *);
+void *taxi_heartbeat_thread(void *);
 void *taxi_beep_thread(void *);
 void *taxi_smoke_thread(void *);
 void *taxi_cycle_thread(void *);
