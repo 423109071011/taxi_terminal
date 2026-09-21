@@ -35,6 +35,12 @@ int uppath_upload(app_state *st, const char *file) {
         if (sscanf(line, "%lf , %lf", &lat, &lon) != 2) continue;
         /* 协议完整 0x0200 消息体（28B 基本信息 + 里程附加项） */
         taxi_build_location_body(st, lat, lon, body);
+        /* 历史点强制置"已定位"：状态位默认取板上 GPS 实时状态，室内未 fix
+         * 时全是"未定位"，平台会按定位状态过滤掉这些真实历史坐标。
+         * bit1(0x02)=已定位 bit18(0x00040000)=GPS定位，status 大端：
+         * body[5]=bit16~23, body[7]=bit24~31 低 8 位 */
+        body[5] |= 0x04;
+        body[7] |= 0x02;
         int n = jt808_build(out, sizeof(out), MSG_LOCATION, st->phone_id, st->term_id,
                             &st->serial, body, 34);
         if (st->net_fd >= 0 && n > 0) hal_net_send(st->net_fd, out, n);
