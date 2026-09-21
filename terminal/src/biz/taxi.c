@@ -75,7 +75,7 @@ int taxi_report_auth(app_state *st) {
  *   状态(4)     bit1=已定位 bit12=车门加锁 bit13=门1开 bit18=GPS定位
  *   纬度(4)     度*1e6 大端
  *   经度(4)     度*1e6 大端
- *   高程(2)/速度(2)/方向(2)
+ *   高程(2)/速度(2)/方向(2)：速度=GPS 地面速度 km/h
  *   时间 BCD[6] YYMMDDhhmmss（UTC；协议要求 GMT+8 时间需换算 UTC 上报）
  *   附加项：ID=0x01 里程 DWORD（协议备注：附加信息只用到了里程）
  */
@@ -118,7 +118,14 @@ void taxi_build_location_body(app_state *st, double lat, double lon,
     body[10] = (ilat >> 8)  & 0xFF;  body[11] = ilat & 0xFF;
     body[12] = (ilon >> 24) & 0xFF;  body[13] = (ilon >> 16) & 0xFF;
     body[14] = (ilon >> 8)  & 0xFF;  body[15] = ilon & 0xFF;
-    /* 高程/速度/方向保持 0 */
+    /* 高程/方向保持 0；速度 = GPS 地面速度 km/h（平台按 alarm_rule 判超速） */
+    {
+        int spd = (int)(st->gps.speed_kmh + 0.5);
+        if (spd < 0)   spd = 0;
+        if (spd > 999) spd = 999;       /* WORD 上限内 */
+        body[18] = (spd >> 8) & 0xFF;
+        body[19] = spd & 0xFF;
+    }
     body[21] = 0x00;                            /* 方向低字节（方向=0） */
     body[22] = (yy / 10) << 4 | (yy % 10);      /* YY */
     body[23] = (mm / 10) << 4 | (mm % 10);      /* MM */

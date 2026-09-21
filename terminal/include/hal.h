@@ -26,6 +26,7 @@ typedef struct {
     double lat, lon;
     int year, month, day;      /* 来自 RMC（UTC 日期） */
     int hour, min, sec, sats, status;
+    double speed_kmh;          /* 来自 RMC 第 7 字段（节）×1.852 → km/h，0x0200 速度字段 */
 } gps_fix_t;
 int hal_gps_open(void);
 int hal_gps_parse(const char *buf, int len, gps_fix_t *fix);

@@ -76,7 +76,8 @@ static double nmea_to_deg(const char *s) {
 
 /*
  * GGA: $GPGGA,hhmmss,llll.lll,a,yyyyy.yyy,a,x,xx,x.x,... (f1时间 f2纬 f4经 f6质量 f7卫星数)
- * RMC: $GPRMC,hhmmss,A|V,llll.lll,a,yyyyy.yyy,a,x.x,x.x,ddmmyy,... (f9日期)
+ * RMC: $GPRMC,hhmmss,A|V,llll.lll,a,yyyyy.yyy,a,速度(节),航向,ddmmyy,...
+ *      f7=地面速度（节）→ ×1.852 = km/h，填 0x0200 速度字段
  * 均为 UTC。返回 1 = 有效定位。
  */
 int hal_gps_parse(const char *buf, int len, gps_fix_t *fix) {
@@ -93,6 +94,11 @@ int hal_gps_parse(const char *buf, int len, gps_fix_t *fix) {
             fix->month = (f[9][2]-'0')*10 + (f[9][3]-'0');
             fix->year  = 2000 + (f[9][4]-'0')*10 + (f[9][5]-'0');
         }
+        /* 地面速度：节 -> km/h（静止时 RMC 该字段为空，保持 0） */
+        if (f[2][0] == 'A' && f[7][0])
+            fix->speed_kmh = atof(f[7]) * 1.852;
+        else
+            fix->speed_kmh = 0.0;
     }
 
     /* --- GGA：定位与时间 --- */
