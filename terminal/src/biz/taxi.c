@@ -268,6 +268,9 @@ void *taxi_key_thread(void *arg) {
                 /* 未刷卡就确认：提示并清空已输入身份码 */
                 printf("[\xcc\xe1\xca\xbe] \xc7\xeb\xcf\xc8\xcb\xa2\xbf\xa8\xd4\xd9\xc8\xb7\xc8\xcf\n");
                 auth_len = 0;
+            } else if (auth_len == 0) {
+                /* 规范流程：刷卡后必须输入密码，空密码不允许上报平台 */
+                printf("[\xcc\xe1\xca\xbe] \xc7\xeb\xca\xe4\xc8\xeb\xc3\xdc\xc2\xeb\xba\xf3\xd4\xd9\xc8\xb7\xc8\xcf\n");
             } else {
                 auth_buf[auth_len] = 0;
                 memcpy(st->auth_buf, auth_buf, auth_len);
