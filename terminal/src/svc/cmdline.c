@@ -31,8 +31,9 @@ static void print_info(app_state *st) {
 }
 
 /*
- * 历史路径文件格式（自动识别，二选一）：
- *  A) "YYMMDD HH:MM:SS 经度 纬度 速度"（空白分隔；北京时间为历史时间，速度 km/h）
+ * 历史路径文件格式（自动识别，三选一）：
+ *  A) "YYMMDD HH:MM:SS 经度 纬度 速度"（空白分隔；速度列可缺省）
+ *  A') "YYMMDD HHMMSS 经度 纬度 [速度]"（时间无冒号）
  *  B) "纬度,经度"（度，十进制；无时间，帧内取当前时间）
  */
 int uppath_upload(app_state *st, const char *file) {
@@ -44,14 +45,22 @@ int uppath_upload(app_state *st, const char *file) {
     while (fgets(line, sizeof(line), f)) {
         double lat = 0, lon = 0, spd = -1.0;
         int ymd = 0, h = 0, m = 0, s = 0;
-        /* 先试 A 格式（ymd>0 且凑满经纬度）；不成再按老 B 格式 */
+        /* 先试 A 格式（时间带冒号）；再试 A'（时间无冒号 HHMMSS）；不成按老 B 格式 */
         if (sscanf(line, "%d %d:%d:%d %lf %lf %lf",
                    &ymd, &h, &m, &s, &lon, &lat, &spd) >= 6 && ymd > 0) {
             ; /* A 格式，ymd/h/m/s/lon/lat/spd 已就位 */
-        } else if (sscanf(line, "%lf , %lf", &lat, &lon) == 2) {
-            ymd = 0;                        /* B 格式：无历史时间 */
         } else {
-            continue;
+            int hms = 0, k;
+            spd = -1.0;
+            k = sscanf(line, "%d %d %lf %lf %lf", &ymd, &hms, &lon, &lat, &spd);
+            if (k >= 4 && ymd > 0 && hms >= 0 && hms <= 235959) {
+                h = hms / 10000; m = hms / 100 % 100; s = hms % 100;
+                if (k < 5) spd = -1.0;      /* 无速度列 */
+            } else if (sscanf(line, "%lf , %lf", &lat, &lon) == 2) {
+                ymd = 0;                    /* B 格式：无历史时间 */
+            } else {
+                continue;
+            }
         }
         /* 协议完整 0x0200 消息体（28B 基本信息 + 里程附加项） */
         taxi_build_location_body(st, lat, lon, body);
