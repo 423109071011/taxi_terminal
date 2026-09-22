@@ -16,6 +16,9 @@ static app_state *g_st;
 /* 疲劳驾驶计时：平台认证 PASS 开门后开始连续计时，达到阈值本地置疲劳报警
  * （阈值按交规 4 小时；演示/测试时可临时改小；平台 0x8210 仍可随时下发） */
 #define DRIVE_FATIGUE_MIN 240
+/* 刷卡有效期：确认时距刷卡超过该秒数，视为"刷卡已过期"，
+ * 0x0210 卡号字段填全 0（无卡）仅上报密码，平台按白名单查不到自然拒绝 */
+#define CARD_VALID_SEC 30
 
 static pthread_mutex_t g_send_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -102,15 +105,26 @@ int taxi_send_term_ack(app_state *st, unsigned short ack_seq, unsigned short ack
 
 int taxi_report_auth(app_state *st) {
     unsigned char body[64];
+    /* 刷卡有效期判定：确认时距刷卡超 CARD_VALID_SEC 秒 → 卡号字段填全 0
+     * （"0000000000"=无卡），只上报密码，平台白名单查不到即拒绝 */
+    int expired = (st->card_time == 0) ||
+                  (time(NULL) - st->card_time > CARD_VALID_SEC);
     /* 卡号 = 4 字节 UID 大端合成十进制，定长 10 位 ASCII（前导 0 补齐）上传，
      * 平台取消息体前 10 字节为卡号，其后为密码 ASCII（auth_len ≤ 6，总长 ≤ 16） */
     int len;
-    snprintf((char *)body, 11, "%010lu", taxi_card_id(st->card));
+    if (expired)
+        memcpy(body, "0000000000", 10);
+    else
+        snprintf((char *)body, 11, "%010lu", taxi_card_id(st->card));
     len = 10 + st->auth_len;
     memcpy(body + 10, st->auth_buf, st->auth_len);
     send_frame(st, MSG_AUTH_REQ, body, len);
-    printf("[TX] AUTH-REQ card=%010lu code=%.*s\n",
-           taxi_card_id(st->card), st->auth_len, st->auth_buf);
+    if (expired)
+        printf("[TX] AUTH-REQ card=0000000000 (card expired >%ds) code=%.*s\n",
+               CARD_VALID_SEC, st->auth_len, st->auth_buf);
+    else
+        printf("[TX] AUTH-REQ card=%010lu code=%.*s\n",
+               taxi_card_id(st->card), st->auth_len, st->auth_buf);
     return 0;
 }
 
@@ -337,6 +351,7 @@ void *taxi_rfid_thread(void *arg) {
         if (r == 1 && (card[0] | card[1] | card[2] | card[3]) != 0) {
             pthread_mutex_lock(&st->lock);
             memcpy(st->card, card, 4); st->has_card = 1;
+            st->card_time = time(NULL);  /* 刷卡时刻：30s 内确认才带卡号上报 */
             st->last_key = time(NULL);   /* 刷卡视为一次操作，刷新空闲计时 */
             pthread_mutex_unlock(&st->lock);
             char ids[16];

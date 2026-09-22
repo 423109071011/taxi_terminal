@@ -16,6 +16,7 @@ typedef struct {
     int key_fd, display_fd, rfid_fd, beep_fd, servo_fd, gps_fd, adc_fd;
     /* 业务状态 */
     unsigned char card[4]; int has_card;
+    time_t card_time;               /* 刷卡时刻：0x0210 确认时距此超 30s 视为刷卡过期 */
     int door_open;
     int verified;                   /* 0 未验证 / 1 准许 / -1 拒绝 */
     int fatigue;
