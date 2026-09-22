@@ -25,23 +25,42 @@ static char *g_card(app_state *st) {
     snprintf(b, sizeof(b), "%02X%02X%02X%02X", st->card[0], st->card[1], st->card[2], st->card[3]);
     return b;
 }
+/* 显示条目数值编码（验收规格：功能类型由数字代表，格式 = 类型号-数值） */
 static char *g_verify(app_state *st) {
-    return st->verified == 1 ? "PASS" : st->verified == -1 ? "FAIL" : "IDLE";
+    static char b[8];
+    snprintf(b, sizeof(b), "%05d", st->verified == 1 ? 1 : st->verified == -1 ? 2 : 0);
+    return b;                       /* 0=未验证 1=通过 2=拒绝 */
 }
-static char *g_door(app_state *st) { return st->door_open ? "OPEN" : "CLOSE"; }
-static char *g_fatigue(app_state *st) { return st->fatigue ? "FATIGUE" : "OK"; }
-static char *g_net(app_state *st) { return st->net_ok ? "ONLINE" : "OFFLINE"; }
+static char *g_door(app_state *st) {
+    static char b[8];
+    snprintf(b, sizeof(b), "%05d", st->door_open ? 1 : 0);
+    return b;                       /* 0=关闭 1=打开 */
+}
+static char *g_fatigue(app_state *st) {
+    static char b[8];
+    snprintf(b, sizeof(b), "%05d", st->fatigue ? 1 : 0);
+    return b;                       /* 0=正常 1=疲劳报警 */
+}
+static char *g_net(app_state *st) {
+    static char b[8];
+    snprintf(b, sizeof(b), "%05d", st->net_ok ? 1 : 0);
+    return b;                       /* 0=离线 1=在线 */
+}
 static char *g_gps(app_state *st) {
     static char b[16];
-    snprintf(b, sizeof(b), "%d", st->gps.sats);
-    return b;
+    snprintf(b, sizeof(b), "%05d", st->gps.sats);
+    return b;                       /* 卫星颗数 */
 }
-static char *g_smoke(app_state *st) { return st->smoke_alarm ? "GASYES" : "GASNO"; }
+static char *g_smoke(app_state *st) {
+    static char b[8];
+    snprintf(b, sizeof(b), "%05d", st->smoke_alarm ? 1 : 0);
+    return b;                       /* 0=正常 1=烟雾超标 */
+}
 static char *g_drive(app_state *st) {
     static char buf[12];
-    if (!st->drive_start) return "----";
-    snprintf(buf, sizeof(buf), "D%ld", (long)((time(NULL) - st->drive_start) / 60));
-    return buf;                     /* 认证开门后的连续驾驶分钟数，如 D125 */
+    long m = st->drive_start ? (long)((time(NULL) - st->drive_start) / 60) : 0L;
+    snprintf(buf, sizeof(buf), "%05ld", m);
+    return buf;                     /* 认证开门后的连续驾驶分钟数 */
 }
 
 /* ---------- 上报 ---------- */
@@ -416,17 +435,17 @@ void *taxi_cycle_thread(void *arg) {
     hal_display_clear(st->display_fd);  /* 开机清一次残留 */
     pthread_mutex_unlock(&st->lock);
     while (1) {
-        sleep(1);
         pthread_mutex_lock(&st->lock);
-        if (time(NULL) - st->last_key >= 10) {
+        int idle = time(NULL) - st->last_key >= 10;
+        pthread_mutex_unlock(&st->lock);
+        if (idle) {
             /* 空闲轮播：每 3 秒切换一项，仅数码管显示，控制台无输出（验收 §B）*/
-            pthread_mutex_unlock(&st->lock);
             display_mgr_show_item(st, pos, 0);
             pos = (pos + 1) % display_mgr_count();
             sleep(3);
-            pthread_mutex_lock(&st->lock);
+        } else {
+            sleep(1);
         }
-        pthread_mutex_unlock(&st->lock);
     }
     return NULL;
 }
