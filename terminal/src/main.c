@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
     pthread_create(&t_cycle, NULL, taxi_cycle_thread,&st);
 
     printf("init done. \xca\xe4\xc8\xeb ? \xbb\xf2 help \xb2\xe9\xbf\xb4\xc3\xfc\xc1\xee\n");
-    printf("[BUILD] 2026-09-22-2010 uppath hist-time+speed enabled\n");
+    printf("[BUILD] 2026-09-22-2055 card-id 4B-BE->u32 decimal (disp+auth)\n");
     cmdline_loop(&st);   /* 主线程只读 stdin */
     hal_beep_off(st.beep_fd);   /* 退出前关掉蜂鸣器，避免余音 */
     return 0;

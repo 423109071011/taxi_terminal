@@ -19,13 +19,21 @@ static app_state *g_st;
 
 static pthread_mutex_t g_send_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/* ---------- 卡号换算 ---------- */
+/* RFID 4 字节 UID 按大端合成一个 32 位整数，再转十进制
+ * （例：0D 0E 0F 10 → 0x0D0E0F10 → 219025168）。
+ * 数码管显示与 0x0210 上传的卡号均使用该换算值，保证两侧一致 */
+static unsigned long taxi_card_id(const unsigned char card[4]) {
+    return ((unsigned long)card[0] << 24) | ((unsigned long)card[1] << 16) |
+           ((unsigned long)card[2] << 8)  |  (unsigned long)card[3];
+}
+
 /* ---------- 显示条目 getter ---------- */
 static char *g_card(app_state *st) {
     static char b[16];
-    /* 与刷卡页一致：每字节换算两位十进制（0D0E0F10 → 13141516）；
+    /* 与刷卡页一致：4 字节 UID 大端合成十进制（0x0D0E0F10 → 219025168）；
      * 第 0 页类型值只放得下 6 位，显示卡号十进制的后六位 */
-    int n = snprintf(b, sizeof(b), "%02u%02u%02u%02u",
-             st->card[0] & 0xFF, st->card[1] & 0xFF, st->card[2] & 0xFF, st->card[3] & 0xFF);
+    int n = snprintf(b, sizeof(b), "%08lu", taxi_card_id(st->card));
     if (n > 6) return b + n - 6;
     return b;
 }
@@ -94,13 +102,15 @@ int taxi_send_term_ack(app_state *st, unsigned short ack_seq, unsigned short ack
 
 int taxi_report_auth(app_state *st) {
     unsigned char body[64];
-    body[0] = st->card[0]; body[1] = st->card[1]; body[2] = st->card[2]; body[3] = st->card[3];
-    /* 输入的身份码（ASCII）由 key 线程暂存到 st->auth_buf */
-    int len = 4 + st->auth_len;
-    memcpy(body + 4, st->auth_buf, st->auth_len);
+    /* 卡号 = 4 字节 UID 大端合成十进制，定长 10 位 ASCII（前导 0 补齐）上传，
+     * 平台取消息体前 10 字节为卡号，其后为密码 ASCII（auth_len ≤ 6，总长 ≤ 16） */
+    int len;
+    snprintf((char *)body, 11, "%010lu", taxi_card_id(st->card));
+    len = 10 + st->auth_len;
+    memcpy(body + 10, st->auth_buf, st->auth_len);
     send_frame(st, MSG_AUTH_REQ, body, len);
-    printf("[TX] AUTH-REQ card=%02X%02X%02X%02X code=%.*s\n",
-           st->card[0], st->card[1], st->card[2], st->card[3], st->auth_len, st->auth_buf);
+    printf("[TX] AUTH-REQ card=%010lu code=%.*s\n",
+           taxi_card_id(st->card), st->auth_len, st->auth_buf);
     return 0;
 }
 
@@ -329,13 +339,12 @@ void *taxi_rfid_thread(void *arg) {
             memcpy(st->card, card, 4); st->has_card = 1;
             st->last_key = time(NULL);   /* 刷卡视为一次操作，刷新空闲计时 */
             pthread_mutex_unlock(&st->lock);
-            char ids[9];
-            /* 卡号按十六进制换算成十进制数字显示：每字节转两位十进制
-             * （如 0D 0E 0F 10 → 13 14 15 16 → 数码管显示 13141516） */
-            snprintf(ids, sizeof(ids), "%02u%02u%02u%02u",
-                     card[0] & 0xFF, card[1] & 0xFF, card[2] & 0xFF, card[3] & 0xFF);
-            ids[8] = 0;
-            hal_display_string(st->display_fd, ids);   /* 卡号十进制显示在数码管 */
+            char ids[16];
+            /* 卡号换算：4 字节 UID 大端合成十进制（0D 0E 0F 10 → 219025168）；
+             * 数码管整屏只有 8 位，超长时右对齐显示后 8 位 */
+            int in = snprintf(ids, sizeof(ids), "%08lu", taxi_card_id(card));
+            const char *disp = (in > 8) ? ids + in - 8 : ids;
+            hal_display_string(st->display_fd, disp);  /* 卡号十进制显示在数码管 */
             auth_len = 0;                              /* 新卡重置密码输入 */
             printf("[\xcb\xa2\xbf\xa8] \xbf\xa8\xba\xc5 %s(hex:%02X%02X%02X%02X)\xa3\xac\xc7\xeb\xca\xe4\xc8\xeb\xc9\xed\xb7\xdd\xc2\xeb\xb2\xa2\xc8\xb7\xc8\xcf\n",
                    ids, card[0], card[1], card[2], card[3]);
