@@ -404,6 +404,7 @@ void *taxi_smoke_thread(void *arg) {
         int v = hal_adc_read(st->adc_fd);
         if (v >= 0) {
             pthread_mutex_lock(&st->lock);
+            st->smoke_val = v;              /* 最新原始值供 info 命令显示 */
             int st_now = st->smoke_alarm;
             pthread_mutex_unlock(&st->lock);
             hi = (v >= SMOKE_TH_ON)  ? hi + 1 : 0;

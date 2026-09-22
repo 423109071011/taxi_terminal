@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <time.h>
 #include "cmdline.h"
 #include "hal.h"
 #include "jt808.h"
@@ -12,7 +13,7 @@ static void print_help(void) {
     printf("commands:\n");
     printf("  ? / help                 show this help\n");
     printf("  info                     show current sensor values\n");
-    printf("  uppath <coord-file>      upload history path to server\n");
+    printf("  uppath [coord-file]      upload history path; no arg = preset file\n");
 }
 
 static void print_info(app_state *st) {
@@ -22,6 +23,10 @@ static void print_info(app_state *st) {
            st->gps.lat, st->gps.lon, st->gps.sats, st->gps.status);
     printf("card: %02x%02x%02x%02x has_card=%d\n",
            st->card[0], st->card[1], st->card[2], st->card[3], st->has_card);
+    printf("smoke: adc=%d alarm=%d\n", st->smoke_val, st->smoke_alarm);
+    printf("drive: %ld min (started=%d)\n",
+           st->drive_start ? (long)((time(NULL) - st->drive_start) / 60) : 0L,
+           st->drive_start ? 1 : 0);
 }
 
 /* 历史路径文件格式：每行 "纬度,经度"（度，十进制） */
@@ -95,7 +100,7 @@ void cmdline_loop(app_state *st) {
         }
         else if (!strcmp(cmd, "uppath")) {
             if (arg[0]) uppath_upload(st, arg);
-            else printf("usage: uppath <coord-file>\n");
+            else uppath_upload(st, "/arduino_drivers/path.txt");   /* 无参数：预存历史路径文件 */
         }
         else if (cmd[0]) printf("unknown cmd: %s (try help)\n", cmd);
         printf("taxi_terminal> "); fflush(stdout);
