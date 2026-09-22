@@ -188,7 +188,11 @@ int taxi_handle_auth_resp(unsigned short id, const unsigned char *b, int len) {
         st->last_key = time(NULL);   /* 认证开门视为一次操作，刷新空闲计时 */
     }
     pthread_mutex_unlock(&st->lock);
-    hal_display_string(st->display_fd, v == 1 ? "PASS" : "FAIL");
+    if (v == 1 || !st->door_open)
+        hal_display_string(st->display_fd, v == 1 ? "PASS" : "FAIL");
+    else
+        /* 刷卡已物理开门、仅身份码未匹配（FAIL）时不覆盖显示，避免误导 */
+        printf("[AUTH] FAIL ignored (door already opened by card swipe)\n");
     if (v == 1 && st->servo_fd >= 0)
         hal_servo_angle(st->servo_fd, st->cfg.door_open_angle);
     hal_beep_on(st->beep_fd); usleep(200000); hal_beep_off(st->beep_fd);
@@ -281,6 +285,9 @@ void *taxi_rfid_thread(void *arg) {
             printf("[\xcb\xa2\xbf\xa8] \xbf\xa8\xba\xc5 %02X%02X%02X%02X\xa3\xac\xb3\xb5\xc3\xc5\xb4\xf2\xbf\xaa\n",
                    card[0], card[1], card[2], card[3]);
             taxi_report_location(st);   /* 刷卡开门状态变化立即上报 */
+            /* 刷卡即上报 0x0210（卡号+已输入身份码，可为空），平台据此记录
+             * "哪张卡开了哪辆车"并推送提醒；匹配裁决照常走 0x8110 */
+            taxi_report_auth(st);
             usleep(500000);
         } else {
             usleep(200000);
