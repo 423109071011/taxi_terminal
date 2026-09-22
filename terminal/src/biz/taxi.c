@@ -22,7 +22,9 @@ static pthread_mutex_t g_send_lock = PTHREAD_MUTEX_INITIALIZER;
 /* ---------- 显示条目 getter ---------- */
 static char *g_card(app_state *st) {
     static char b[16];
-    snprintf(b, sizeof(b), "%02X%02X%02X%02X", st->card[0], st->card[1], st->card[2], st->card[3]);
+    /* 与刷卡页一致：每字节换算两位十进制（0D0E0F10 → 13141516） */
+    snprintf(b, sizeof(b), "%02u%02u%02u%02u",
+             st->card[0] & 0xFF, st->card[1] & 0xFF, st->card[2] & 0xFF, st->card[3] & 0xFF);
     return b;
 }
 /* 显示条目数值编码（验收规格：功能类型由数字代表，格式 = 类型号-数值） */
