@@ -260,7 +260,11 @@ void *taxi_key_thread(void *arg) {
         pthread_mutex_lock(&st->lock);
         if (a == K_DIGIT) {
             if (auth_len < 6) { auth_buf[auth_len++] = d; auth_buf[auth_len] = 0; }
-            hal_display_char(d);   /* 新数字滚入最左位，旧数字右移 */
+            /* 数码管只显示已输入的密码，按输入顺序左对齐（如 12345 显示 12345），
+             * 不再与卡号混显滚入 */
+            char pw[8];
+            snprintf(pw, sizeof(pw), "%.*s", auth_len, auth_buf);
+            hal_display_string(st->display_fd, pw);
             /* 串口终端按 GBK 解码，中文用 GBK 字节转义，避免乱码 */
             printf("[\xc9\xed\xb7\xdd\xc2\xeb\xca\xe4\xc8\xeb] %.*s\n", auth_len, auth_buf);
         } else if (a == K_CONFIRM) {
@@ -322,10 +326,15 @@ void *taxi_rfid_thread(void *arg) {
             st->last_key = time(NULL);   /* 刷卡视为一次操作，刷新空闲计时 */
             pthread_mutex_unlock(&st->lock);
             char ids[9];
-            snprintf(ids, sizeof(ids), "%02X%02X%02X%02X",
-                     card[0], card[1], card[2], card[3]);
-            hal_display_string(st->display_fd, ids);   /* 卡号 8 位 hex 显示在数码管 */
-            printf("[\xcb\xa2\xbf\xa8] \xbf\xa8\xba\xc5 %s\xa3\xac\xc7\xeb\xca\xe4\xc8\xeb\xc9\xed\xb7\xdd\xc2\xeb\xb2\xa2\xc8\xb7\xc8\xcf\n", ids);
+            /* 卡号按十六进制换算成十进制数字显示：每字节转两位十进制
+             * （如 0D 0E 0F 10 → 13 14 15 16 → 数码管显示 13141516） */
+            snprintf(ids, sizeof(ids), "%02u%02u%02u%02u",
+                     card[0] & 0xFF, card[1] & 0xFF, card[2] & 0xFF, card[3] & 0xFF);
+            ids[8] = 0;
+            hal_display_string(st->display_fd, ids);   /* 卡号十进制显示在数码管 */
+            auth_len = 0;                              /* 新卡重置密码输入 */
+            printf("[\xcb\xa2\xbf\xa8] \xbf\xa8\xba\xc5 %s(hex:%02X%02X%02X%02X)\xa3\xac\xc7\xeb\xca\xe4\xc8\xeb\xc9\xed\xb7\xdd\xc2\xeb\xb2\xa2\xc8\xb7\xc8\xcf\n",
+                   ids, card[0], card[1], card[2], card[3]);
             usleep(500000);
         } else {
             usleep(200000);
