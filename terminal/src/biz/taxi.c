@@ -194,6 +194,7 @@ int taxi_handle_auth_resp(unsigned short id, const unsigned char *b, int len) {
     hal_beep_on(st->beep_fd); usleep(200000); hal_beep_off(st->beep_fd);
     printf("[AUTH] %s%s\n", v == 1 ? "PASS" : "FAIL",
            v == 1 ? ", door open" : "");
+    if (v == 1) taxi_report_location(st);   /* 车门状态变化立即上报 */
     return 0;
 }
 
@@ -206,6 +207,7 @@ int taxi_handle_fatigue(unsigned short id, const unsigned char *b, int len) {
     st->fatigue = (b[0] == 1) ? 1 : 0;
     pthread_mutex_unlock(&st->lock);
     printf("[RX] FATIGUE: %s\n", st->fatigue ? "ON" : "OFF");
+    taxi_report_location(st);   /* 报警状态变化立即上报（对接要求，不等心跳） */
     return 0;
 }
 
@@ -220,7 +222,7 @@ void *taxi_key_thread(void *arg) {
         int v = hal_key_read(st->key_fd, &code);
         if (v != 1) continue;
         int a = key_map(code, &d);
-        int need_auth = 0;
+        int need_auth = 0, need_report = 0;
         pthread_mutex_lock(&st->lock);
         if (a == K_DIGIT) {
             if (auth_len < 6) { auth_buf[auth_len++] = d; auth_buf[auth_len] = 0; }
@@ -235,6 +237,7 @@ void *taxi_key_thread(void *arg) {
             auth_len = 0;
         } else if (a == K_CLOSE) {
             st->door_open = 0;
+            need_report = 1;    /* 关车门状态变化立即上报 */
             hal_servo_angle(st->servo_fd, st->cfg.door_close_angle);
             printf("[\xb3\xb5\xc3\xc5] \xb9\xd8\xb1\xd5\n");
         } else if (a == K_PREV) {
@@ -250,12 +253,14 @@ void *taxi_key_thread(void *arg) {
             hal_beep_off(st->beep_fd);
             st->fatigue = 0;
             st->smoke_alarm = 0;
+            need_report = 1;    /* 报警解除状态变化立即上报 */
             printf("[KEY] code=%u alarm dismissed (fatigue/smoke cleared, beep off)\n", code);
             hal_display_string(st->display_fd, "OK");
         }
         st->last_key = time(NULL);
         pthread_mutex_unlock(&st->lock);
         if (need_auth) taxi_report_auth(st);
+        if (need_report) taxi_report_location(st);
     }
     return NULL;
 }
@@ -275,6 +280,7 @@ void *taxi_rfid_thread(void *arg) {
             hal_servo_angle(st->servo_fd, st->cfg.door_open_angle);
             printf("[\xcb\xa2\xbf\xa8] \xbf\xa8\xba\xc5 %02X%02X%02X%02X\xa3\xac\xb3\xb5\xc3\xc5\xb4\xf2\xbf\xaa\n",
                    card[0], card[1], card[2], card[3]);
+            taxi_report_location(st);   /* 刷卡开门状态变化立即上报 */
             usleep(500000);
         } else {
             usleep(200000);
