@@ -13,6 +13,10 @@
 /* 供消息处理函数访问（taxi_init 时指向 main 的 st） */
 static app_state *g_st;
 
+/* 疲劳驾驶计时：平台认证 PASS 开门后开始连续计时，达到阈值本地置疲劳报警
+ * （阈值按交规 4 小时；演示/测试时可临时改小；平台 0x8210 仍可随时下发） */
+#define DRIVE_FATIGUE_MIN 240
+
 static pthread_mutex_t g_send_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* ---------- 显示条目 getter ---------- */
@@ -33,6 +37,12 @@ static char *g_gps(app_state *st) {
     return b;
 }
 static char *g_smoke(app_state *st) { return st->smoke_alarm ? "GASYES" : "GASNO"; }
+static char *g_drive(app_state *st) {
+    static char buf[12];
+    if (!st->drive_start) return "----";
+    snprintf(buf, sizeof(buf), "D%ld", (long)((time(NULL) - st->drive_start) / 60));
+    return buf;                     /* 认证开门后的连续驾驶分钟数，如 D125 */
+}
 
 /* ---------- 上报 ---------- */
 static void send_frame(app_state *st, unsigned short mid, const unsigned char *body, int len) {
@@ -185,6 +195,7 @@ int taxi_handle_auth_resp(unsigned short id, const unsigned char *b, int len) {
     int v = st->verified;
     if (v == 1) {
         st->door_open = 1;
+        st->drive_start = time(NULL);   /* 平台确认通过，开始疲劳驾驶计时 */
         st->last_key = time(NULL);   /* 认证开门视为一次操作，刷新空闲计时 */
     }
     pthread_mutex_unlock(&st->lock);
@@ -234,13 +245,20 @@ void *taxi_key_thread(void *arg) {
             /* 串口终端按 GBK 解码，中文用 GBK 字节转义，避免乱码 */
             printf("[\xc9\xed\xb7\xdd\xc2\xeb\xca\xe4\xc8\xeb] %.*s\n", auth_len, auth_buf);
         } else if (a == K_CONFIRM) {
-            auth_buf[auth_len] = 0;
-            memcpy(st->auth_buf, auth_buf, auth_len);
-            st->auth_len = auth_len;
-            need_auth = 1;
-            auth_len = 0;
+            if (!st->has_card) {
+                /* 未刷卡就确认：提示并清空已输入身份码 */
+                printf("[\xcc\xe1\xca\xbe] \xc7\xeb\xcf\xc8\xcb\xa2\xbf\xa8\xd4\xd9\xc8\xb7\xc8\xcf\n");
+                auth_len = 0;
+            } else {
+                auth_buf[auth_len] = 0;
+                memcpy(st->auth_buf, auth_buf, auth_len);
+                st->auth_len = auth_len;
+                need_auth = 1;
+                auth_len = 0;
+            }
         } else if (a == K_CLOSE) {
             st->door_open = 0;
+            st->drive_start = 0;         /* 关车门：停止疲劳驾驶计时 */
             need_report = 1;    /* 关车门状态变化立即上报 */
             hal_servo_angle(st->servo_fd, st->cfg.door_close_angle);
             printf("[\xb3\xb5\xc3\xc5] \xb9\xd8\xb1\xd5\n");
@@ -257,6 +275,7 @@ void *taxi_key_thread(void *arg) {
             hal_beep_off(st->beep_fd);
             st->fatigue = 0;
             st->smoke_alarm = 0;
+            if (st->drive_start) st->drive_start = time(NULL);  /* 解除疲劳后重新计时 */
             need_report = 1;    /* 报警解除状态变化立即上报 */
             printf("[KEY] code=%u alarm dismissed (fatigue/smoke cleared, beep off)\n", code);
             hal_display_string(st->display_fd, "OK");
@@ -278,16 +297,13 @@ void *taxi_rfid_thread(void *arg) {
         if (r == 1 && (card[0] | card[1] | card[2] | card[3]) != 0) {
             pthread_mutex_lock(&st->lock);
             memcpy(st->card, card, 4); st->has_card = 1;
-            st->door_open = 1;
-            st->last_key = time(NULL);   /* 刷卡开门视为一次操作，刷新空闲计时 */
+            st->last_key = time(NULL);   /* 刷卡视为一次操作，刷新空闲计时 */
             pthread_mutex_unlock(&st->lock);
-            hal_servo_angle(st->servo_fd, st->cfg.door_open_angle);
-            printf("[\xcb\xa2\xbf\xa8] \xbf\xa8\xba\xc5 %02X%02X%02X%02X\xa3\xac\xb3\xb5\xc3\xc5\xb4\xf2\xbf\xaa\n",
-                   card[0], card[1], card[2], card[3]);
-            taxi_report_location(st);   /* 刷卡开门状态变化立即上报 */
-            /* 刷卡即上报 0x0210（卡号+已输入身份码，可为空），平台据此记录
-             * "哪张卡开了哪辆车"并推送提醒；匹配裁决照常走 0x8110 */
-            taxi_report_auth(st);
+            char ids[9];
+            snprintf(ids, sizeof(ids), "%02X%02X%02X%02X",
+                     card[0], card[1], card[2], card[3]);
+            hal_display_string(st->display_fd, ids);   /* 卡号 8 位 hex 显示在数码管 */
+            printf("[\xcb\xa2\xbf\xa8] \xbf\xa8\xba\xc5 %s\xa3\xac\xc7\xeb\xca\xe4\xc8\xeb\xc9\xed\xb7\xdd\xc2\xeb\xb2\xa2\xc8\xb7\xc8\xcf\n", ids);
             usleep(500000);
         } else {
             usleep(200000);
@@ -332,6 +348,19 @@ void *taxi_beep_thread(void *arg) {
             hal_beep_on(st->beep_fd); usleep(300000);
             hal_beep_off(st->beep_fd); usleep(300000);
         } else {
+            /* 疲劳驾驶计时检查：认证开门后连续驾驶达到阈值，本地置疲劳报警 */
+            int trig = 0;
+            pthread_mutex_lock(&st->lock);
+            if (st->drive_start && !st->fatigue &&
+                time(NULL) - st->drive_start >= (time_t)DRIVE_FATIGUE_MIN * 60) {
+                st->fatigue = 1;
+                trig = 1;
+            }
+            pthread_mutex_unlock(&st->lock);
+            if (trig) {
+                printf("[FATIGUE] driving %dmin, local fatigue alarm ON\n", DRIVE_FATIGUE_MIN);
+                taxi_report_location(st);   /* 报警位置变化立即上报 */
+            }
             usleep(100000);
         }
     }
@@ -421,6 +450,7 @@ int taxi_init(app_state *st) {
     display_mgr_register(4, "NET", g_net);
     display_mgr_register(5, "GPS-SATS", g_gps);
     display_mgr_register(6, "SMOKE", g_smoke);
+    display_mgr_register(7, "DRIVE", g_drive);
 
     dispatch_register(MSG_PLAT_ACK,  taxi_handle_plat_ack);
     dispatch_register(MSG_BUZZER,    taxi_handle_buzzer);

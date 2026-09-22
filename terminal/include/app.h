@@ -20,6 +20,7 @@ typedef struct {
     int verified;                   /* 0 未验证 / 1 准许 / -1 拒绝 */
     int fatigue;
     int smoke_alarm;                /* 烟雾超标报警状态（滞回+连续确认后） */
+    time_t drive_start;             /* 疲劳驾驶计时起点：平台认证 PASS 开门后开始，0=未在计时 */
     gps_fix_t gps;
     int net_ok;
     /* 身份码输入 */
